@@ -1,3 +1,11 @@
 node_modules/
 dist/
 .env
+
+# Logs and OS / editor files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

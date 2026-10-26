@@ -11,6 +11,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import api from '../api/client';
 import { navItems } from '../navItems';
 import { LogoMark } from '../components/Logo';
+import { useAuth } from '../auth/AuthContext';
 
 // Placeholder KPIs - wired to real data once the sales/stock modules exist.
 const kpis = [
@@ -64,13 +65,14 @@ function SystemStatus() {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
         <LogoMark size={52} />
         <Box>
           <Typography variant="h5" fontWeight={700}>
-            Welcome back
+            Welcome back{user ? `, ${user.name.split(' ')[0]}` : ''}
           </Typography>
           <Typography color="text.secondary">
             Overview of your sales, stock and orders.
