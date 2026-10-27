@@ -262,4 +262,3 @@ Logging out is handled on the client by discarding the token.
 - [ ] Customers and suppliers
 - [ ] Dashboard charts and reports
 - [ ] Audit log
-- [ ] Coming soon
