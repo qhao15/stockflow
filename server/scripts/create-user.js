@@ -4,8 +4,7 @@
 import bcrypt from 'bcryptjs';
 import { ensureDatabase, pool } from '../src/config/db.js';
 import { ensureSchema } from '../src/db/schema.js';
-
-const ROLES = ['admin', 'manager', 'staff'];
+import { ROLES } from '../src/auth/permissions.js';
 const args = process.argv.slice(2);
 // create-admin passes --admin so the role argument can be left out.
 const role = args[0] === '--admin' ? 'admin' : args.shift();
@@ -28,11 +27,13 @@ try {
   await ensureDatabase();
   await ensureSchema();
   const passwordHash = await bcrypt.hash(password, 10);
+  // Resetting the password of an existing account signs out its sessions (see requireAuth).
+  const changedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
   await pool.query(
     `INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE name = VALUES(name), password_hash = VALUES(password_hash),
-       role = VALUES(role), is_active = 1`,
-    [displayName, email, passwordHash, role]
+       role = VALUES(role), is_active = 1, password_changed_at = ?`,
+    [displayName, email, passwordHash, role, changedAt]
   );
   console.log(`${displayName} account ready: ${email} (${role})`);
 } catch (err) {

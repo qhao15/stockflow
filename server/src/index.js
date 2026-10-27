@@ -5,6 +5,8 @@ import { ensureDatabase } from './config/db.js';
 import { ensureSchema } from './db/schema.js';
 import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
+import usersRouter from './routes/users.js';
+import accountRouter from './routes/account.js';
 
 dotenv.config();
 
@@ -21,6 +23,8 @@ app.use(express.json());
 
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/users', usersRouter);
+app.use('/api/account', accountRouter);
 
 app.use((req, res) => res.status(404).json({ message: 'Not found' }));
 

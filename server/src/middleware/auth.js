@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { pool } from '../config/db.js';
+import { hasPermission, permissionsFor } from '../auth/permissions.js';
 
 export function signToken(user) {
   return jwt.sign({ sub: user.id, role: user.role }, process.env.JWT_SECRET, {
@@ -8,7 +9,13 @@ export function signToken(user) {
 }
 
 export function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email, role: user.role };
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    permissions: permissionsFor(user.role),
+  };
 }
 
 // Verifies the Bearer token and reloads the user, so a deactivated account or
@@ -27,11 +34,15 @@ export async function requireAuth(req, res, next) {
 
   try {
     const [rows] = await pool.query(
-      'SELECT id, name, email, role, is_active FROM users WHERE id = ?',
+      'SELECT id, name, email, role, is_active, password_changed_at FROM users WHERE id = ?',
       [payload.sub]
     );
     const user = rows[0];
     if (!user || !user.is_active) return res.status(401).json({ message: 'Account not available' });
+    // A password change signs out every session that logged in with the old password.
+    if (user.password_changed_at && payload.iat * 1000 < user.password_changed_at.getTime()) {
+      return res.status(401).json({ message: 'Your password was changed, please log in again' });
+    }
     req.user = publicUser(user);
     next();
   } catch (err) {
@@ -42,6 +53,16 @@ export async function requireAuth(req, res, next) {
 export function requireRole(...roles) {
   return (req, res, next) => {
     if (!roles.includes(req.user?.role)) {
+      return res.status(403).json({ message: 'You do not have permission to do this' });
+    }
+    next();
+  };
+}
+
+// Preferred over requireRole: the role -> permission mapping lives in auth/permissions.js.
+export function requirePermission(permission) {
+  return (req, res, next) => {
+    if (!hasPermission(req.user?.role, permission)) {
       return res.status(403).json({ message: 'You do not have permission to do this' });
     }
     next();

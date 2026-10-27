@@ -6,9 +6,9 @@ import {
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import MenuOpenIcon from '@mui/icons-material/MenuOpen';
 import LogoutIcon from '@mui/icons-material/Logout';
+import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import { navItems } from '../navItems';
 import { useAuth } from '../auth/AuthContext';
 import Logo, { LogoMark } from './Logo';
@@ -30,9 +30,12 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [menuAnchor, setMenuAnchor] = useState(null);
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
   const location = useLocation();
-  const current = navItems.find((item) => item.path === location.pathname);
+  const visibleItems = navItems.filter((item) => can(item.permission));
+  const current = location.pathname === '/account'
+    ? { label: 'Account settings' }
+    : navItems.find((item) => item.path === location.pathname);
 
   // The mobile drawer always opens full width; collapsing only applies on desktop.
   const sidebarWidth = collapsed ? collapsedWidth : drawerWidth;
@@ -65,7 +68,7 @@ export default function Layout() {
       </Toolbar>
       <Divider />
       <List sx={{ px: 1 }}>
-        {navItems.map(({ label, path, icon: Icon }) => (
+        {visibleItems.map(({ label, path, icon: Icon }) => (
           <Tooltip key={path} title={mini ? label : ''} placement="right">
             <ListItemButton
               component={NavLink}
@@ -140,6 +143,12 @@ export default function Layout() {
               <Chip label={user?.role} size="small" color="primary" variant="outlined" sx={{ mt: 1, textTransform: 'capitalize' }} />
             </Box>
             <Divider sx={{ my: 1 }} />
+            <MenuItem component={NavLink} to="/account" onClick={() => setMenuAnchor(null)}>
+              <ListItemIcon>
+                <ManageAccountsIcon fontSize="small" />
+              </ListItemIcon>
+              Account settings
+            </MenuItem>
             <MenuItem onClick={handleLogout}>
               <ListItemIcon>
                 <LogoutIcon fontSize="small" />
@@ -198,7 +207,8 @@ export default function Layout() {
               '&:hover': { bgcolor: 'primary.main', color: 'primary.contrastText', borderColor: 'primary.main' },
             }}
           >
-            {collapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+            {/* Menu icons rather than arrows, which read as "go back". */}
+            {collapsed ? <MenuIcon fontSize="small" /> : <MenuOpenIcon fontSize="small" />}
           </IconButton>
         </Tooltip>
       </Box>

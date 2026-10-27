@@ -15,7 +15,7 @@ import { useAuth } from '../auth/AuthContext';
 
 // Placeholder KPIs - wired to real data once the sales/stock modules exist.
 const kpis = [
-  { label: 'Revenue (this month)', value: '—', icon: TrendingUpIcon, color: '#1e5eff' },
+  { label: 'Revenue (this month)', value: '—', icon: TrendingUpIcon, color: '#1e5eff', permission: 'reports.view' },
   { label: 'Sales orders', value: '—', icon: ReceiptLongIcon, color: '#12b76a' },
   { label: 'Products', value: '—', icon: Inventory2Icon, color: '#7a5af8' },
   { label: 'Low-stock items', value: '—', icon: WarningAmberIcon, color: '#f79009' },
@@ -65,14 +65,15 @@ function SystemStatus() {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  const visibleKpis = kpis.filter((kpi) => can(kpi.permission));
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
         <LogoMark size={52} />
         <Box>
           <Typography variant="h5" fontWeight={700}>
-            Welcome back{user ? `, ${user.name.split(' ')[0]}` : ''}
+            Welcome back{user ? `, ${user.name}` : ''}
           </Typography>
           <Typography color="text.secondary">
             Overview of your sales, stock and orders.
@@ -81,8 +82,8 @@ export default function Dashboard() {
       </Box>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        {kpis.map(({ label, value, icon: Icon, color }) => (
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }} key={label}>
+        {visibleKpis.map(({ label, value, icon: Icon, color }) => (
+          <Grid size={{ xs: 12, sm: 6, lg: 12 / visibleKpis.length }} key={label}>
             <Card>
               <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Box
@@ -112,7 +113,7 @@ export default function Dashboard() {
       </Typography>
       <Grid container spacing={2}>
         {navItems
-          .filter((item) => item.path !== '/')
+          .filter((item) => item.path !== '/' && can(item.permission))
           .map(({ label, path, description, icon: Icon }) => (
             <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={path}>
               <Card sx={{ height: '100%' }}>

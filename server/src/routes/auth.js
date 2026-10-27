@@ -2,9 +2,9 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { pool } from '../config/db.js';
 import { publicUser, requireAuth, signToken } from '../middleware/auth.js';
+import { EMAIL_RE, MIN_PASSWORD_LENGTH } from '../utils/validation.js';
 
 const router = Router();
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // POST /api/auth/register - the first account becomes Admin, everyone after is Staff.
 router.post('/register', async (req, res, next) => {
@@ -14,7 +14,9 @@ router.post('/register', async (req, res, next) => {
 
   if (!name || name.length > 100) return res.status(400).json({ message: 'Name is required (max 100 characters)' });
   if (!EMAIL_RE.test(email)) return res.status(400).json({ message: 'Please enter a valid email' });
-  if (password.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters' });
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return res.status(400).json({ message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+  }
 
   try {
     const [[{ count }]] = await pool.query('SELECT COUNT(*) AS count FROM users');

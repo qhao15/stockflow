@@ -59,9 +59,23 @@ export function AuthProvider({ children }) {
     reloadTo(safeRedirect(redirectTo));
   }, []);
 
+  // After editing the own account: the server returns the updated user and, after a
+  // password change, a new token (the old one stops working).
+  const updateSession = useCallback(({ token, user: updated }) => {
+    if (token) setToken(token);
+    setUser(updated);
+  }, []);
+
+  // The permission list comes from the server. This only decides what to show;
+  // the API checks every request again.
+  const can = useCallback(
+    (permission) => !permission || Boolean(user?.permissions?.includes(permission)),
+    [user]
+  );
+
   const value = useMemo(
-    () => ({ user, loading, login, register, logout }),
-    [user, loading, login, register, logout]
+    () => ({ user, loading, login, register, logout, can, updateSession }),
+    [user, loading, login, register, logout, can, updateSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
