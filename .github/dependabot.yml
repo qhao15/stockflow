@@ -1,12 +1,16 @@
 version: 2
 updates:
-  # Packages that must be upgraded together are grouped, so each PR can pass CI on its own
-  # (e.g. react-dom 19 fails without react 19). A package goes into the first group it matches.
-  # Everything else: minor and patch updates are grouped; each major update gets its own PR.
+  # Monthly minor and patch updates only. Major versions (e.g. React 19, Express 5) change
+  # APIs and are upgraded by hand, on a branch, with testing.
+  # Packages that must be upgraded together are grouped, so each PR can pass CI on its own.
+  # A package goes into the first group it matches.
   - package-ecosystem: npm
     directory: /client
     schedule:
-      interval: weekly
+      interval: monthly
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
     groups:
       react:
         patterns: [react, react-dom, '@types/react', '@types/react-dom']
@@ -17,20 +21,26 @@ updates:
       vite:
         patterns: [vite, '@vitejs/*']
       client-minor:
-        update-types: [minor, patch]
+        patterns: ['*']
 
   - package-ecosystem: npm
     directory: /server
     schedule:
-      interval: weekly
+      interval: monthly
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
     groups:
       server-minor:
-        update-types: [minor, patch]
+        patterns: ['*']
 
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: monthly
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
 
   # All actions in one PR: they share ci.yml, so separate PRs conflict with each other.
   - package-ecosystem: github-actions

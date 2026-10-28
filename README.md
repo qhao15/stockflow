@@ -157,7 +157,7 @@ Admins can't demote or deactivate themselves, so the system always keeps at leas
 stockflow/
 ├── .github/
 │   ├── workflows/ci.yml        # GitHub Actions: client build + server checks against MySQL
-│   └── dependabot.yml          # Weekly dependency update PRs
+│   └── dependabot.yml          # Monthly minor/patch dependency update PRs
 ├── client/                     # React frontend (Vite)
 │   ├── public/logo.svg         # Logo / favicon
 │   └── src/
@@ -301,7 +301,7 @@ Logging out is handled on the client by discarding the token.
 - **CI ([GitHub Actions](.github/workflows/ci.yml)):** every push and pull request runs two checks, and both must pass before merging:
   - **Client build:** installs the client with `npm ci` and builds it.
   - **Server checks:** syntax-checks every server file, then starts the API against a fresh MySQL 8 database and checks that `/api/health` reports it connected, which also proves the schema can be created from scratch.
-- **Dependencies:** [Dependabot](.github/dependabot.yml) opens weekly update PRs, grouping minor and patch updates; major versions get their own PR.
+- **Dependencies:** [Dependabot](.github/dependabot.yml) opens monthly PRs with minor and patch updates, grouped so packages that must match (React, MUI, AG Grid, Vite) move together. Major versions are upgraded by hand on a branch, with testing. Security fixes arrive as soon as a vulnerability is published.
 - **Security:** CodeQL scans the code on every push, and secret scanning with push protection blocks commits that contain credentials. See [SECURITY.md](SECURITY.md) to report a vulnerability.
 
 ## Roadmap
