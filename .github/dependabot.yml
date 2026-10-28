@@ -1,12 +1,21 @@
 version: 2
 updates:
-  # Minor and patch updates are grouped into one PR per folder each week;
-  # major versions get their own PR so breaking changes are reviewed separately.
+  # Packages that must be upgraded together are grouped, so each PR can pass CI on its own
+  # (e.g. react-dom 19 fails without react 19). A package goes into the first group it matches.
+  # Everything else: minor and patch updates are grouped; each major update gets its own PR.
   - package-ecosystem: npm
     directory: /client
     schedule:
       interval: weekly
     groups:
+      react:
+        patterns: [react, react-dom, '@types/react', '@types/react-dom']
+      mui:
+        patterns: ['@mui/*', '@emotion/*']
+      ag-grid:
+        patterns: ['ag-grid-*']
+      vite:
+        patterns: [vite, '@vitejs/*']
       client-minor:
         update-types: [minor, patch]
 
@@ -23,7 +32,11 @@ updates:
     schedule:
       interval: monthly
 
+  # All actions in one PR: they share ci.yml, so separate PRs conflict with each other.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      github-actions:
+        patterns: ['*']
