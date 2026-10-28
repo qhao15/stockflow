@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { pool } from '../config/db.js';
+import { pool } from '../db/pool.js';
 import { ROLES } from '../auth/permissions.js';
-import { publicUser, requireAuth, requirePermission } from '../middleware/auth.js';
+import { publicUser, requireAuth, requirePermission } from '../auth/middleware.js';
 
 const router = Router();
 

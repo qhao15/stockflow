@@ -2,7 +2,7 @@
 // Usage: npm run create-user -- <admin|manager|staff> <email> <password> [name]
 //        npm run create-admin -- <email> <password> [name]
 import bcrypt from 'bcryptjs';
-import { ensureDatabase, pool } from '../src/config/db.js';
+import { ensureDatabase, pool } from '../src/db/pool.js';
 import { ensureSchema } from '../src/db/schema.js';
 import { ROLES } from '../src/auth/permissions.js';
 const args = process.argv.slice(2);

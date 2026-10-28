@@ -1,4 +1,6 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
+import { LinearProgress } from '@mui/material';
 import Layout from './components/Layout';
 import RequireAuth from './auth/RequireAuth';
 import RequirePermission from './auth/RequirePermission';
@@ -10,9 +12,13 @@ import Users from './pages/Users';
 import Account from './pages/Account';
 import { navItems } from './navItems';
 
+// Loaded on first visit: AG Grid is large, and not every user opens these pages.
+const ProductsPage = lazy(() => import('./pages/products/ProductsPage'));
+
 // Modules that have a real page; the rest show "Coming soon" for now.
 const pages = {
   '/admin': Users,
+  '/products': ProductsPage,
 };
 
 export default function App() {
@@ -35,7 +41,9 @@ export default function App() {
                   path={path}
                   element={
                     <RequirePermission permission={permission}>
-                      {Page ? <Page /> : <ComingSoon title={label} />}
+                      <Suspense fallback={<LinearProgress />}>
+                        {Page ? <Page /> : <ComingSoon title={label} />}
+                      </Suspense>
                     </RequirePermission>
                   }
                 />

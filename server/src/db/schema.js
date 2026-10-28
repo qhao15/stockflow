@@ -1,4 +1,4 @@
-import { pool } from '../config/db.js';
+import { pool } from './pool.js';
 
 // Tables are created on startup until a proper migration tool is added.
 // Order matters: a table is listed after the tables its foreign keys point to.
@@ -24,6 +24,16 @@ const tables = [
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB`,
+
+  // Per-user UI settings that follow the user across browsers (e.g. grid columns).
+  `CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id INT UNSIGNED NOT NULL,
+    pref_key VARCHAR(100) NOT NULL,
+    value JSON NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, pref_key),
+    CONSTRAINT fk_preferences_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
   ) ENGINE=InnoDB`,
 
   `CREATE TABLE IF NOT EXISTS categories (

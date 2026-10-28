@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
-import { pool } from '../config/db.js';
-import { hasPermission, permissionsFor } from '../auth/permissions.js';
+import { pool } from '../db/pool.js';
+import { hasPermission, permissionsFor } from './permissions.js';
 
 export function signToken(user) {
   return jwt.sign({ sub: user.id, role: user.role }, process.env.JWT_SECRET, {
@@ -59,7 +59,7 @@ export function requireRole(...roles) {
   };
 }
 
-// Preferred over requireRole: the role -> permission mapping lives in auth/permissions.js.
+// Preferred over requireRole: the role -> permission mapping lives in permissions.js.
 export function requirePermission(permission) {
   return (req, res, next) => {
     if (!hasPermission(req.user?.role, permission)) {

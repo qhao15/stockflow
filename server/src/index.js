@@ -1,12 +1,14 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { ensureDatabase } from './config/db.js';
+import { ensureDatabase } from './db/pool.js';
 import { ensureSchema } from './db/schema.js';
 import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
 import accountRouter from './routes/account.js';
+import categoriesRouter from './routes/categories.js';
+import productsRouter from './routes/products.js';
 
 dotenv.config();
 
@@ -25,6 +27,8 @@ app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/account', accountRouter);
+app.use('/api/categories', categoriesRouter);
+app.use('/api/products', productsRouter);
 
 app.use((req, res) => res.status(404).json({ message: 'Not found' }));
 
