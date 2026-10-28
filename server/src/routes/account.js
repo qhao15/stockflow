@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { pool } from '../config/db.js';
-import { publicUser, requireAuth, signToken } from '../middleware/auth.js';
-import { EMAIL_RE, MIN_PASSWORD_LENGTH } from '../utils/validation.js';
+import { pool } from '../db/pool.js';
+import { publicUser, requireAuth, signToken } from '../auth/middleware.js';
+import { EMAIL_RE, MIN_PASSWORD_LENGTH } from '../validators/common.js';
 
 // The logged-in user's own account. Any role can use it.
 const router = Router();
@@ -53,6 +53,42 @@ router.put('/password', async (req, res, next) => {
       passwordHash, changedAt, req.user.id,
     ]);
     res.json({ token: signToken(req.user), user: publicUser(req.user) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Saved UI settings, e.g. which grid columns are shown. key: letters, numbers, . _ -
+const PREFERENCE_KEY = /^[a-zA-Z0-9._-]{1,100}$/;
+const MAX_PREFERENCE_SIZE = 20_000;
+
+// GET /api/account/preferences/:key - { value } or { value: null } if never saved.
+router.get('/preferences/:key', async (req, res, next) => {
+  if (!PREFERENCE_KEY.test(req.params.key)) return res.status(400).json({ message: 'Invalid preference key' });
+  try {
+    const [rows] = await pool.query('SELECT value FROM user_preferences WHERE user_id = ? AND pref_key = ?', [
+      req.user.id, req.params.key,
+    ]);
+    // MariaDB returns JSON columns as text, MySQL as parsed objects.
+    const value = rows[0]?.value ?? null;
+    res.json({ value: typeof value === 'string' ? JSON.parse(value) : value });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/account/preferences/:key  body: { value }
+router.put('/preferences/:key', async (req, res, next) => {
+  if (!PREFERENCE_KEY.test(req.params.key)) return res.status(400).json({ message: 'Invalid preference key' });
+  const json = JSON.stringify(req.body.value ?? null);
+  if (json.length > MAX_PREFERENCE_SIZE) return res.status(400).json({ message: 'Preference is too large' });
+  try {
+    await pool.query(
+      `INSERT INTO user_preferences (user_id, pref_key, value) VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE value = VALUES(value)`,
+      [req.user.id, req.params.key, json]
+    );
+    res.status(204).end();
   } catch (err) {
     next(err);
   }

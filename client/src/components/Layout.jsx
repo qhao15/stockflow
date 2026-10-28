@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  AppBar, Avatar, Box, Chip, Divider, Drawer, IconButton, List, ListItemButton,
-  ListItemIcon, ListItemText, Menu, MenuItem, Toolbar, Tooltip, Typography,
+  Alert, AppBar, Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogContentText,
+  DialogTitle, Divider, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Menu,
+  MenuItem, Snackbar, Toolbar, Tooltip, Typography,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -12,6 +13,7 @@ import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import { navItems } from '../navItems';
 import { useAuth } from '../auth/AuthContext';
 import Logo, { LogoMark } from './Logo';
+import { takeFlash } from '../lib/flash';
 
 const drawerWidth = 250;
 const collapsedWidth = 72;
@@ -30,6 +32,14 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [menuAnchor, setMenuAnchor] = useState(null);
+  const [flash, setFlashMessage] = useState(null);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+
+  // A message left for after a page reload, e.g. "Account created" after registering.
+  useEffect(() => {
+    const message = takeFlash();
+    if (message) setFlashMessage(message);
+  }, []);
   const { user, logout, can } = useAuth();
   const location = useLocation();
   const visibleItems = navItems.filter((item) => can(item.permission));
@@ -44,10 +54,10 @@ export default function Layout() {
     duration: theme.transitions.duration.standard,
   });
 
-  // Clears the session and reloads onto the login page.
+  // Asks first; confirming clears the session and reloads onto the login page.
   const handleLogout = () => {
     setMenuAnchor(null);
-    logout();
+    setConfirmLogout(true);
   };
 
   const toggleCollapsed = () => {
@@ -117,7 +127,7 @@ export default function Layout() {
           <IconButton edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 2, display: { md: 'none' } }}>
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" sx={{ flexGrow: 1 }} noWrap>
+          <Typography variant="h6" fontWeight="bold" sx={{ flexGrow: 1 }} noWrap>
             {current?.label ?? 'Sales & Inventory'}
           </Typography>
           <Tooltip title="Account">
@@ -220,6 +230,30 @@ export default function Layout() {
         <Toolbar />
         <Outlet />
       </Box>
+
+      <Dialog open={confirmLogout} onClose={() => setConfirmLogout(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>You want to log out?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>You can log in again to use StockFlow.</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmLogout(false)} autoFocus>Cancel</Button>
+          <Button variant="contained" startIcon={<LogoutIcon />} onClick={() => logout()}>Log out</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={Boolean(flash)}
+        autoHideDuration={6000}
+        onClose={() => setFlashMessage(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        // Just below the top bar instead of covering it.
+        sx={{ top: { xs: 64, sm: 76 } }}
+      >
+        {flash ? (
+          <Alert severity={flash.severity} variant="filled" onClose={() => setFlashMessage(null)}>{flash.message}</Alert>
+        ) : undefined}
+      </Snackbar>
     </Box>
   );
 }

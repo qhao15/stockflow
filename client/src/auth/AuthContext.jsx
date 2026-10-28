@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import api, { TOKEN_KEY, getToken, setToken, setUnauthorizedHandler } from '../api/client';
+import api, { TOKEN_KEY, getToken, setToken, setUnauthorizedHandler } from '../lib/api';
+import { setFlash } from '../lib/flash';
 
 const AuthContext = createContext(null);
 
@@ -56,6 +57,7 @@ export function AuthProvider({ children }) {
   const register = useCallback(async (name, email, password, redirectTo) => {
     const res = await api.post('/auth/register', { name, email, password });
     setToken(res.data.token);
+    setFlash(`Account created. Welcome to StockFlow, ${res.data.user.name}!`);
     reloadTo(safeRedirect(redirectTo));
   }, []);
 

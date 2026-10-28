@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, Chip, Stack, TextField, Typography } from '@mui/material';
-import api, { errorMessage } from '../api/client';
+import api, { errorMessage } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -45,7 +45,7 @@ function ProfileForm() {
             <Typography variant="body2" color="text.secondary" component="span" sx={{ mr: 1 }}>Role:</Typography>
             <Chip label={user.role} size="small" color="primary" variant="outlined" sx={{ textTransform: 'capitalize' }} />
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-              Only an admin can change roles.
+              Only admin can change roles.
             </Typography>
           </Box>
           {status && <Alert severity={status.severity}>{status.message}</Alert>}

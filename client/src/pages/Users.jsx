@@ -3,7 +3,7 @@ import {
   Alert, Box, Card, Chip, MenuItem, Select, Skeleton, Snackbar, Switch, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Tooltip, Typography,
 } from '@mui/material';
-import api, { errorMessage } from '../api/client';
+import api, { errorMessage } from '../lib/api';
 import { useAuth } from '../auth/AuthContext';
 
 const ROLE_OPTIONS = [
@@ -121,9 +121,11 @@ export default function Users() {
         open={Boolean(toast)}
         autoHideDuration={3000}
         onClose={() => setToast(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        // Just below the top bar instead of covering it.
+        sx={{ top: { xs: 64, sm: 76 } }}
       >
-        {toast ? <Alert severity={toast.severity} onClose={() => setToast(null)}>{toast.message}</Alert> : undefined}
+        {toast ? <Alert severity={toast.severity} variant="filled" onClose={() => setToast(null)}>{toast.message}</Alert> : undefined}
       </Snackbar>
     </Box>
   );

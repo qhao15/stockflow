@@ -8,7 +8,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import api from '../api/client';
+import api from '../lib/api';
 import { navItems } from '../navItems';
 import { LogoMark } from '../components/Logo';
 import { useAuth } from '../auth/AuthContext';
@@ -20,6 +20,14 @@ const kpis = [
   { label: 'Products', value: '—', icon: Inventory2Icon, color: '#7a5af8' },
   { label: 'Low-stock items', value: '—', icon: WarningAmberIcon, color: '#f79009' },
 ];
+
+// Based on the computer's local time.
+function greeting(hour = new Date().getHours()) {
+  if (hour >= 5 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 17) return 'Good afternoon';
+  if (hour >= 17 && hour < 21) return 'Good evening';
+  return 'Good night';
+}
 
 function SystemStatus() {
   const [health, setHealth] = useState(null);
@@ -73,7 +81,7 @@ export default function Dashboard() {
         <LogoMark size={52} />
         <Box>
           <Typography variant="h5" fontWeight={700}>
-            Welcome back{user ? `, ${user.name}` : ''}
+            {greeting()}{user ? `, ${user.name}` : ''}
           </Typography>
           <Typography color="text.secondary">
             Overview of your sales, stock and orders.

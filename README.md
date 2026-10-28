@@ -8,16 +8,20 @@
   A full-stack <b>Sales &amp; Inventory Management</b> system built with React, Node.js and MySQL.
 </p>
 
+<p align="center">
+  <a href="https://github.com/qhao15/stockflow/actions/workflows/ci.yml"><img src="https://github.com/qhao15/stockflow/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+</p>
+
 StockFlow tracks products across multiple warehouses, handles purchase orders from suppliers and sales orders to customers, and keeps every stock change traceable through a movement ledger instead of a single editable number.
 
-> **Status:** in active development. Authentication, role-based access, the app layout and the dashboard shell are done; the business modules are being built step by step (see [Roadmap](#roadmap)).
+> **Status:** in active development. Authentication, role-based access, the database schema with demo data, and the products module are done; stock, orders and reports are being built step by step (see [Roadmap](#roadmap)).
 
 ## Tech stack
 
 | Layer    | Technology                                             |
 | -------- | ------------------------------------------------------ |
-| Frontend | React 18, Vite, Material UI (MUI), React Router, Axios |
-| Backend  | Node.js, Express                                       |
+| Frontend | React 18, Vite, Material UI (MUI), AG Grid Community, React Router, Axios |
+| Backend  | Node.js, Express, ExcelJS (Excel import/export), Multer (file uploads) |
 | Database | MySQL 8 / MariaDB 10.4+ (via `mysql2`)                 |
 | Auth     | JSON Web Tokens (`jsonwebtoken`), `bcryptjs` password hashing |
 
@@ -34,10 +38,16 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
 - **App layout**: responsive sidebar that collapses to icons only (the choice is remembered), account menu with role and logout, mobile drawer.
 - **Dashboard shell**: KPI cards and a live API/database status check.
 - **Database schema and demo data**: all core tables, plus a seed script that simulates a year of business for a fictional electronics and computer accessories distributor (see [Demo data](#demo-data)).
+- **Products and categories** (see [Products module](#products-module)):
+  - Product list in AG Grid. Paging, sorting, search and filters (category, status, low stock) all run on the server.
+  - Inline editing of prices and minimum stock, with optimistic locking.
+  - Add/edit dialog.
+  - Column show/hide, order and width saved per user on the server.
+  - Excel export (respects the current filters) and all-or-nothing Excel import.
+  - Category management.
 
 ### Planned
 
-- **Products**: SKU, category, price, unit, image, minimum stock level, bulk import from Excel
 - **Warehouses & stock**: stock per product per warehouse, transfers between warehouses, low-stock alerts
 - **Purchase orders**: `draft → approved → received`; receiving increases stock
 - **Sales orders**: creating an order decreases stock, cancelling returns it; PDF invoices
@@ -51,11 +61,11 @@ Stock is never edited directly. Every change (purchase received, sale, cancellat
 
 ## Database
 
-The tables are defined in [`server/src/db/schema.js`](server/src/db/schema.js) and created automatically on startup.
+The tables are defined in [`server/src/db/schema.js`](server/src/db/schema.js) and created automatically on startup. See the **[Entity Relationship Diagram](ERD.md)** for all tables, columns and relationships.
 
 | Area | Tables | Notes |
 | ---- | ------ | ----- |
-| Accounts | `users` | Role is a column; what each role may do is defined in code (see [Roles and permissions](#roles-and-permissions)) |
+| Accounts | `users`, `user_preferences` | Role is a column; what each role may do is defined in code (see [Roles and permissions](#roles-and-permissions)). Preferences hold per-user UI settings as JSON |
 | Catalog | `categories`, `products` | SKU is unique; `min_stock` drives low-stock alerts; `version` for optimistic locking on edits |
 | Warehouses | `warehouses`, `stock` | `stock` has one row per product per warehouse, with `CHECK (quantity >= 0)` and a `version` column |
 | Stock ledger | `stock_movements`, `stock_transfers` | Signed `quantity_change`, `balance_after`, type, and a reference to the order or transfer that caused it |
@@ -96,7 +106,23 @@ The seed replaces all business data but keeps user accounts. It creates (or rese
 | Bui Van B    | `staff@stockflow.demo`   | Staff   |
 | Do Van C     | `staff2@stockflow.demo`  | Staff   |
 
-Product brands are real; suppliers, customers and people are fictional.
+Product brands are real; suppliers, customers and people are fictional. SKUs follow `CATEGORY-BRAND-MODEL-VARIANT`, for example `LAP-DELL-XPS13-16-512` or `CMP-ASUS-RTX4090-ROG`.
+
+## Products module
+
+- **Server-side grid.** The product list uses AG Grid's infinite row model. The grid asks the API for one page at a time with the current sort and filters, so the browser never loads the whole catalog. Sort columns are checked against a whitelist on the server, and search text is escaped for `LIKE`.
+- **Inline editing with optimistic locking.**
+  - Double-clicking a price or min stock opens a number editor.
+  - Each save sends the product's `version`, and the update runs as `UPDATE ... WHERE id = ? AND version = ?`.
+  - If someone else saved in between, 0 rows change. The API returns `409` with the current product, and the grid shows the latest values instead of silently overwriting them.
+- **Same rules everywhere.** The form, inline edits and the Excel import share one validator, `server/src/validators/product.js`, so a row that imports is exactly a row the form would accept.
+- **All-or-nothing import.**
+  - The whole file is validated first, including SKUs repeated within the file.
+  - If any row is wrong, nothing is saved and the user gets a list of problems by row and column.
+  - Otherwise every row is written in one transaction: an existing SKU updates that product, a new SKU creates one.
+  - Column order doesn't matter, and an exported file can be edited and imported again.
+- **Per-user columns.** Hidden columns, order and width are saved in `user_preferences`, so they follow the user to any browser.
+- **Code splitting.** The Products page, which includes AG Grid, loads only when someone opens it, which keeps the main bundle small.
 
 ## Roles and permissions
 
@@ -129,13 +155,17 @@ Admins can't demote or deactivate themselves, so the system always keeps at leas
 
 ```
 stockflow/
+├── .github/
+│   ├── workflows/ci.yml        # GitHub Actions: client build + server checks against MySQL
+│   └── dependabot.yml          # Weekly dependency update PRs
 ├── client/                     # React frontend (Vite)
 │   ├── public/logo.svg         # Logo / favicon
 │   └── src/
-│       ├── api/client.js       # Axios instance, token handling, 401 interceptor
 │       ├── auth/               # AuthContext, login and permission guards, login/register layout
 │       ├── components/         # Layout (sidebar + top bar), Logo
-│       ├── pages/              # Login, Register, Dashboard and module pages
+│       ├── lib/                # api.js (Axios, token, 401 handling), agGrid.js, flash.js
+│       ├── pages/              # Login, Register, Dashboard, Account, Users
+│       │   └── products/       # Product grid, product/import dialogs, categories tab
 │       ├── navItems.js         # Sidebar / module definitions
 │       └── theme.js            # MUI theme
 ├── server/                     # Node.js + Express API
@@ -145,13 +175,14 @@ stockflow/
 │   │   ├── seed.js             # Simulate a year of business as demo data
 │   │   └── seed-data.js        # Product catalog, suppliers, warehouses, demo accounts
 │   └── src/
-│       ├── auth/permissions.js # Role -> permission matrix
-│       ├── config/db.js        # MySQL pool + auto-create database
-│       ├── db/schema.js        # Table definitions, created on startup
-│       ├── middleware/auth.js  # JWT verification and permission checks
-│       ├── routes/             # API routes (health, auth, users, account)
-│       ├── utils/validation.js # Shared email/password rules
+│       ├── auth/               # permissions.js (role -> permission matrix), middleware.js (JWT + permission checks)
+│       ├── db/                 # pool.js (MySQL pool + auto-create database), schema.js (tables, created on startup)
+│       ├── routes/             # API routes (health, auth, users, account, categories, products)
+│       ├── services/           # Product queries, Excel template/export/import parsing
+│       ├── validators/         # common.js (email/password), product.js (shared by the API and the import)
 │       └── index.js            # App entry point
+├── ERD.md                      # Entity Relationship Diagram
+├── SECURITY.md                 # How to report a vulnerability
 └── package.json                # Root scripts (run both apps together)
 ```
 
@@ -159,7 +190,7 @@ stockflow/
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18 or newer
+- [Node.js](https://nodejs.org/) 20 or newer (required by React Router 7)
 - MySQL 8 or MariaDB 10.4+ running locally (e.g. MySQL Community Server or XAMPP)
 
 ### 1. Clone and install
@@ -244,18 +275,44 @@ Passwords must be at least 8 characters. This is also the way to reset a forgott
 | PATCH  | `/api/users/:id`     | `users.manage` | Change `role` and/or `isActive`                           |
 | PATCH  | `/api/account`       | JWT  | Change own `name` and `email`                                       |
 | PUT    | `/api/account/password` | JWT | Change own password (`currentPassword`, `newPassword`); returns a new token |
+| GET/PUT | `/api/account/preferences/:key` | JWT | Read / save a UI setting for the current user (e.g. grid columns) |
+| GET    | `/api/categories`    | `products.view` | Categories with their product counts                     |
+| POST   | `/api/categories`    | `products.manage` | Create a category (`code`, `name`, `description`)      |
+| PATCH  | `/api/categories/:id` | `products.manage` | Edit a category                                       |
+| DELETE | `/api/categories/:id` | `products.manage` | Delete a category that has no products                |
+| GET    | `/api/products`      | `products.view` | List with `offset`, `limit`, `sort`, `dir`, `search`, `categoryId`, `brand`, `status`, `lowStock`; returns `{ rows, total }` |
+| GET    | `/api/products/options` | `products.view` | Categories, units and brands for filters and forms    |
+| GET    | `/api/products/:id`  | `products.view` | One product, with total stock                            |
+| POST   | `/api/products`      | `products.manage` | Create a product                                       |
+| PATCH  | `/api/products/:id`  | `products.manage` | Edit any fields; requires the `version` that was loaded (`409` if someone else saved first) |
+| DELETE | `/api/products/:id`  | `products.manage` | Delete a product that was never used; one with sales, purchase or stock history returns `409` (set it inactive instead) |
+| GET    | `/api/products/export` | `products.view` | Excel file of the products matching the same filters as the list |
+| GET    | `/api/products/import-template` | `products.manage` | Excel template with instructions and the category list |
+| POST   | `/api/products/import` | `products.manage` | Upload `.xlsx` (field `file`); all rows validated first, all or nothing |
 
 Missing or expired token → `401`; valid token without the permission → `403`.
 
 Logging out is handled on the client by discarding the token.
 
+## Development workflow
+
+- **Planning:** each roadmap item is a [GitHub issue](https://github.com/qhao15/stockflow/issues) with a task checklist, grouped into milestones and tracked on the [project board](https://github.com/users/qhao15/projects/1).
+- **Branches and pull requests:** `main` is protected. Work happens on a branch (e.g. `feature/sales-orders`) and is merged through a pull request; `Closes #N` in the PR closes the issue and moves its card to Done.
+- **CI ([GitHub Actions](.github/workflows/ci.yml)):** every push and pull request runs two checks, and both must pass before merging:
+  - **Client build:** installs the client with `npm ci` and builds it.
+  - **Server checks:** syntax-checks every server file, then starts the API against a fresh MySQL 8 database and checks that `/api/health` reports it connected, which also proves the schema can be created from scratch.
+- **Dependencies:** [Dependabot](.github/dependabot.yml) opens weekly update PRs, grouping minor and patch updates; major versions get their own PR.
+- **Security:** CodeQL scans the code on every push, and secret scanning with push protection blocks commits that contain credentials. See [SECURITY.md](SECURITY.md) to report a vulnerability.
+
 ## Roadmap
+
+Progress is tracked on the [project board](https://github.com/users/qhao15/projects/1).
 
 - [x] Project setup, app layout and dashboard shell
 - [x] Authentication: register, login, logout (JWT + bcrypt)
 - [x] Role-based access per module (Admin / Manager / Staff)
 - [x] Database schema and seed data
-- [ ] Products and categories (with Excel import)
+- [x] Products and categories (with Excel import)
 - [ ] Warehouses, stock and transfers
 - [ ] Purchase orders
 - [ ] Sales orders and PDF invoices

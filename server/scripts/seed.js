@@ -11,10 +11,10 @@
 // Replaces all business data (products, stock, orders, ...). User accounts are
 // kept; the demo accounts are created or reset.
 import bcrypt from 'bcryptjs';
-import { ensureDatabase, pool } from '../src/config/db.js';
+import { ensureDatabase, pool } from '../src/db/pool.js';
 import { ensureSchema } from '../src/db/schema.js';
 import {
-  DEMO_PASSWORD, cancelReasons, catalog, customerNames, demoUsers, people, streets,
+  DEMO_PASSWORD, brandCodes, cancelReasons, catalog, customerNames, demoUsers, people, streets,
   suppliers as supplierDefs, warehouses as warehouseDefs,
 } from './seed-data.js';
 
@@ -129,7 +129,6 @@ function slug(text) {
 function address(city) {
   return `${int(1, 350)} ${pick(streets)}, ${city}`;
 }
-const skuPart = (text) => text.toUpperCase().replace(/[^A-Z0-9]/g, '');
 // Prices under $100 end in .99, larger ones are whole dollars.
 const retailPrice = (p) => (p < 100 ? Math.ceil(p) - 0.01 : Math.round(p));
 
@@ -153,10 +152,10 @@ function buildMasterData() {
   const base = [];
   for (const cat of categories) {
     for (const [brand, models] of Object.entries(cat.brands)) {
-      for (const [model, price, modelOpts = {}] of models) {
+      for (const [model, price, modelCode, modelOpts = {}] of models) {
         const variants = modelOpts.single || !cat.variants ? [null] : cat.variants;
         for (const v of variants) {
-          const sku = [cat.code, skuPart(brand).slice(0, 6), skuPart(model).slice(0, 16), v && v[1]].filter(Boolean).join('-');
+          const sku = [cat.code, brandCodes[brand], modelCode, v && v[1]].filter(Boolean).join('-');
           base.push({
             sku,
             name: v ? `${brand} ${model} ${v[0]}` : `${brand} ${model}`,

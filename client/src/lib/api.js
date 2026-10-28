@@ -48,4 +48,19 @@ export function errorMessage(err, fallback = 'Something went wrong') {
   return err.response?.data?.message ?? (err.response ? fallback : 'Cannot reach the server');
 }
 
+// Downloads a file from the API (with the auth header, which a plain <a href> can't send).
+export async function downloadFile(url, params, fallbackName) {
+  const res = await api.get(url, { params, responseType: 'blob' });
+  const disposition = res.headers['content-disposition'] ?? '';
+  const name = /filename="?([^"]+)"?/.exec(disposition)?.[1] ?? fallbackName;
+  const href = URL.createObjectURL(res.data);
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
 export default api;

@@ -3,7 +3,7 @@ import { Link as RouterLink, Navigate, useSearchParams } from 'react-router-dom'
 import { Alert, Box, Button, Link, TextField, Typography } from '@mui/material';
 import { safeRedirect, useAuth } from '../auth/AuthContext';
 import AuthLayout from '../auth/AuthLayout';
-import { errorMessage } from '../api/client';
+import { errorMessage } from '../lib/api';
 
 export default function Register() {
   const { user, register } = useAuth();

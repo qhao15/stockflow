@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { pool } from '../config/db.js';
-import { publicUser, requireAuth, signToken } from '../middleware/auth.js';
-import { EMAIL_RE, MIN_PASSWORD_LENGTH } from '../utils/validation.js';
+import { pool } from '../db/pool.js';
+import { publicUser, requireAuth, signToken } from '../auth/middleware.js';
+import { EMAIL_RE, MIN_PASSWORD_LENGTH } from '../validators/common.js';
 
 const router = Router();
 
