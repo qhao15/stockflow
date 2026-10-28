@@ -303,19 +303,28 @@ Logging out is handled on the client by discarding the token.
   - **Server checks:** syntax-checks every server file, then starts the API against a fresh MySQL 8 database and checks that `/api/health` reports it connected, which also proves the schema can be created from scratch.
 - **Dependencies:** [Dependabot](.github/dependabot.yml) opens monthly PRs with minor and patch updates, grouped so packages that must match (React, MUI, AG Grid, Vite) move together. Major versions are upgraded by hand on a branch, with testing. Security fixes arrive as soon as a vulnerability is published.
 - **Security:** CodeQL scans the code on every push, and secret scanning with push protection blocks commits that contain credentials. See [SECURITY.md](SECURITY.md) to report a vulnerability.
+- **Releases:** each finished milestone is tagged as a [release](https://github.com/qhao15/stockflow/releases) using semantic versioning (`v0.1.0`, `v0.2.0`, …), with notes on what it includes.
 
 ## Roadmap
 
-Progress is tracked on the [project board](https://github.com/users/qhao15/projects/1).
+Progress is tracked on the [project board](https://github.com/users/qhao15/projects/1). Each item links to its issue, which has the full task list.
 
-- [x] Project setup, app layout and dashboard shell
-- [x] Authentication: register, login, logout (JWT + bcrypt)
-- [x] Role-based access per module (Admin / Manager / Staff)
-- [x] Database schema and seed data
-- [x] Products and categories (with Excel import)
-- [ ] Warehouses, stock and transfers
-- [ ] Purchase orders
-- [ ] Sales orders and PDF invoices
-- [ ] Customers and suppliers
-- [ ] Dashboard charts and reports
-- [ ] Audit log
+**[v0.1 Foundation](https://github.com/qhao15/stockflow/milestone/1)**
+
+- [x] Project setup, app layout and dashboard shell ([#1](https://github.com/qhao15/stockflow/issues/1))
+- [x] Authentication: register, login, logout with JWT + bcrypt ([#2](https://github.com/qhao15/stockflow/issues/2))
+- [x] Role-based access per module: Admin / Manager / Staff ([#3](https://github.com/qhao15/stockflow/issues/3))
+- [x] Database schema and seed data ([#4](https://github.com/qhao15/stockflow/issues/4))
+- [x] Products and categories, with Excel import ([#5](https://github.com/qhao15/stockflow/issues/5))
+
+**[v0.2 Stock & orders](https://github.com/qhao15/stockflow/milestone/2)**
+
+- [ ] Warehouses, stock and transfers ([#6](https://github.com/qhao15/stockflow/issues/6))
+- [ ] Purchase orders ([#7](https://github.com/qhao15/stockflow/issues/7))
+- [ ] Sales orders and PDF invoices ([#8](https://github.com/qhao15/stockflow/issues/8))
+- [ ] Customers and suppliers ([#9](https://github.com/qhao15/stockflow/issues/9))
+
+**[v0.3 Reports & audit](https://github.com/qhao15/stockflow/milestone/3)**
+
+- [ ] Dashboard charts and reports ([#10](https://github.com/qhao15/stockflow/issues/10))
+- [ ] Audit log ([#11](https://github.com/qhao15/stockflow/issues/11))
