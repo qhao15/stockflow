@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
+import { apiLimiter } from '../auth/rateLimit.js';
 
 const router = Router();
+
+router.use(apiLimiter);
 
 // GET /api/health - reports API and database status for the main page.
 router.get('/', async (req, res) => {

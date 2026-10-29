@@ -3,10 +3,12 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../db/pool.js';
 import { publicUser, requireAuth, signToken } from '../auth/middleware.js';
 import { EMAIL_RE, MIN_PASSWORD_LENGTH } from '../validators/common.js';
+import { apiLimiter } from '../auth/rateLimit.js';
 
 // The logged-in user's own account. Any role can use it.
 const router = Router();
 
+router.use(apiLimiter);
 router.use(requireAuth);
 
 // PATCH /api/account - change own name and email.

@@ -2,10 +2,12 @@ import { Router } from 'express';
 import { pool, withTransaction } from '../db/pool.js';
 import { requireAuth, requirePermission } from '../auth/middleware.js';
 import { validateWarehouse } from '../validators/stock.js';
+import { apiLimiter } from '../auth/rateLimit.js';
 
 const router = Router();
 const canManage = requirePermission('warehouses.manage');
 
+router.use(apiLimiter);
 router.use(requireAuth);
 
 // units: total stock held. in_use: has stock history or orders, so it can't be deleted.

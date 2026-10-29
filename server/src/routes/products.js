@@ -5,10 +5,13 @@ import { requireAuth, requirePermission } from '../auth/middleware.js';
 import { PRODUCT_COLUMNS, UNITS, firstError, validateProduct } from '../validators/product.js';
 import { categoryExists, getProduct, listProducts } from '../services/products.js';
 import { XLSX_TYPE, buildExport, buildTemplate, columnHeader, readProductFile } from '../services/productExcel.js';
+import { apiLimiter } from '../auth/rateLimit.js';
 
 const router = Router();
 const canView = requirePermission('products.view');
 const canManage = requirePermission('products.manage');
+
+router.use(apiLimiter);
 
 const MAX_EXPORT_ROWS = 100_000;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } });

@@ -4,10 +4,12 @@ import { requireAuth, requirePermission } from '../auth/middleware.js';
 import { listMovements, listStock } from '../services/stock.js';
 import { ADJUSTMENT_REASONS, StockError, adjustStock, transferStock } from '../services/stockLedger.js';
 import { validateAdjustment, validateTransfer } from '../validators/stock.js';
+import { apiLimiter } from '../auth/rateLimit.js';
 
 const router = Router();
 const canView = requirePermission('stock.view');
 
+router.use(apiLimiter);
 router.use(requireAuth);
 
 const paging = (query) => ({

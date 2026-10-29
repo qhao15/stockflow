@@ -3,11 +3,14 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../db/pool.js';
 import { publicUser, requireAuth, signToken } from '../auth/middleware.js';
 import { EMAIL_RE, MIN_PASSWORD_LENGTH } from '../validators/common.js';
+import { apiLimiter, authLimiter } from '../auth/rateLimit.js';
 
 const router = Router();
 
+router.use(apiLimiter);
+
 // POST /api/auth/register - the first account becomes Admin, everyone after is Staff.
-router.post('/register', async (req, res, next) => {
+router.post('/register', authLimiter, async (req, res, next) => {
   const name = String(req.body.name ?? '').trim();
   const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');
@@ -36,7 +39,7 @@ router.post('/register', async (req, res, next) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res, next) => {
+router.post('/login', authLimiter, async (req, res, next) => {
   const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');
   if (!email || !password) return res.status(400).json({ message: 'Email and password are required' });

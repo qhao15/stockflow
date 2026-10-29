@@ -21,7 +21,7 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
 | Layer    | Technology                                             |
 | -------- | ------------------------------------------------------ |
 | Frontend | React 18, Vite, Material UI (MUI), AG Grid Community, React Router, Axios |
-| Backend  | Node.js, Express, ExcelJS (Excel import/export), Multer (file uploads) |
+| Backend  | Node.js, Express, ExcelJS (Excel import/export), Multer (file uploads), express-rate-limit |
 | Database | MySQL 8 / MariaDB 10.4+ (via `mysql2`)                 |
 | Auth     | JSON Web Tokens (`jsonwebtoken`), `bcryptjs` password hashing |
 
@@ -165,6 +165,7 @@ Admins can't demote or deactivate themselves, so the system always keeps at leas
 - `requirePermission('purchase_orders.approve')` middleware protects routes. It reads the role from the freshly loaded user, not from the token.
 - Changing or resetting a password records `password_changed_at`. Tokens issued before that moment are refused, so a stolen or forgotten session stops working, while the tab that made the change gets a fresh token.
 - Post-login redirects only accept same-site paths, so a crafted `?redirect=` link can't send users to another website.
+- **Rate limiting** ([`server/src/auth/rateLimit.js`](server/src/auth/rateLimit.js)): 10 failed login or register attempts per IP in 15 minutes, which slows down password guessing (successful logins don't count), and 300 requests per minute for the rest of the API. Over the limit the API answers `429` with a message the client shows.
 
 ## Project structure
 
