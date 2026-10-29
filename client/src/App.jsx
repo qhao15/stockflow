@@ -15,13 +15,30 @@ import { navItems } from './navItems';
 // Loaded on first visit: AG Grid is large, and not every user opens these pages.
 const ProductsPage = lazy(() => import('./pages/products/ProductsPage'));
 const StockPage = lazy(() => import('./pages/stock/StockPage'));
+const PurchaseOrdersPage = lazy(() => import('./pages/purchaseOrders/PurchaseOrdersPage'));
+const PurchaseOrderForm = lazy(() => import('./pages/purchaseOrders/PurchaseOrderForm'));
+const PurchaseOrderDetail = lazy(() => import('./pages/purchaseOrders/PurchaseOrderDetail'));
 
 // Modules that have a real page; the rest show "Coming soon" for now.
 const pages = {
   '/admin': AdminPage,
   '/products': ProductsPage,
   '/stock': StockPage,
+  '/purchase-orders': PurchaseOrdersPage,
 };
+
+// Pages below a module (detail, form), each with the permission it needs.
+const subPages = [
+  { path: '/purchase-orders/new', Page: PurchaseOrderForm, permission: 'purchase_orders.create' },
+  { path: '/purchase-orders/:id', Page: PurchaseOrderDetail, permission: 'purchase_orders.view' },
+  { path: '/purchase-orders/:id/edit', Page: PurchaseOrderForm, permission: 'purchase_orders.create' },
+];
+
+const guarded = (permission, element) => (
+  <RequirePermission permission={permission}>
+    <Suspense fallback={<LinearProgress />}>{element}</Suspense>
+  </RequirePermission>
+);
 
 export default function App() {
   return (
@@ -38,19 +55,12 @@ export default function App() {
             .map(({ path, label, permission }) => {
               const Page = pages[path];
               return (
-                <Route
-                  key={path}
-                  path={path}
-                  element={
-                    <RequirePermission permission={permission}>
-                      <Suspense fallback={<LinearProgress />}>
-                        {Page ? <Page /> : <ComingSoon title={label} />}
-                      </Suspense>
-                    </RequirePermission>
-                  }
-                />
+                <Route key={path} path={path} element={guarded(permission, Page ? <Page /> : <ComingSoon title={label} />)} />
               );
             })}
+          {subPages.map(({ path, Page, permission }) => (
+            <Route key={path} path={path} element={guarded(permission, <Page />)} />
+          ))}
           <Route path="*" element={<ComingSoon title="Page not found" />} />
         </Route>
       </Route>

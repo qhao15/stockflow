@@ -1,3 +1,5 @@
+import { AppError } from './errors.js';
+
 // The only code that changes stock. Every change locks the stock row, updates the
 // quantity and writes its stock_movements row in the caller's transaction, so `stock`
 // always equals the sum of its movements - even when a request fails half-way.
@@ -11,14 +13,8 @@ export const ADJUSTMENT_REASONS = {
   other: 'Other',
 };
 
-// A business-rule failure with the HTTP status the route should answer with.
-export class StockError extends Error {
-  constructor(message, status = 409, details = {}) {
-    super(message);
-    this.status = status;
-    this.details = details;
-  }
-}
+// Stock-specific failures (not enough stock, inactive warehouse...).
+export class StockError extends AppError {}
 
 const pad = (n) => String(n).padStart(6, '0');
 

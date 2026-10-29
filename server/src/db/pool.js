@@ -27,6 +27,9 @@ export const pool = mysql.createPool({
   database: DB_NAME,
   waitForConnections: true,
   connectionLimit: 10,
+  // DATE columns (e.g. a PO's expected date) stay 'YYYY-MM-DD' text: as JS Dates they'd
+  // become midnight in the server's time zone and could show as the previous day elsewhere.
+  dateStrings: ['DATE'],
 });
 
 const RETRYABLE = new Set(['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT']);
