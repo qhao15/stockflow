@@ -133,6 +133,10 @@ const tables = [
     approved_at DATETIME NULL,
     received_by INT UNSIGNED NULL,
     received_at DATETIME NULL,
+    cancelled_by INT UNSIGNED NULL,
+    cancelled_at DATETIME NULL,
+    cancel_reason VARCHAR(255) NULL,
+    version INT UNSIGNED NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_po_status (status),
@@ -140,7 +144,8 @@ const tables = [
     CONSTRAINT fk_po_warehouse FOREIGN KEY (warehouse_id) REFERENCES warehouses (id),
     CONSTRAINT fk_po_created_by FOREIGN KEY (created_by) REFERENCES users (id),
     CONSTRAINT fk_po_approved_by FOREIGN KEY (approved_by) REFERENCES users (id),
-    CONSTRAINT fk_po_received_by FOREIGN KEY (received_by) REFERENCES users (id)
+    CONSTRAINT fk_po_received_by FOREIGN KEY (received_by) REFERENCES users (id),
+    CONSTRAINT fk_po_cancelled_by FOREIGN KEY (cancelled_by) REFERENCES users (id)
   ) ENGINE=InnoDB`,
 
   `CREATE TABLE IF NOT EXISTS purchase_order_items (
@@ -253,6 +258,15 @@ const tables = [
 // skips existing tables, so these are added to older databases here.
 const addedColumns = [
   ['users', 'password_changed_at', 'TIMESTAMP NULL AFTER password_hash'],
+  ['purchase_orders', 'cancelled_by', 'INT UNSIGNED NULL AFTER received_at'],
+  ['purchase_orders', 'cancelled_at', 'DATETIME NULL AFTER cancelled_by'],
+  ['purchase_orders', 'cancel_reason', 'VARCHAR(255) NULL AFTER cancelled_at'],
+  ['purchase_orders', 'version', 'INT UNSIGNED NOT NULL DEFAULT 0 AFTER cancel_reason'],
+];
+
+// Foreign keys for columns added above (new databases get them from CREATE TABLE).
+const addedForeignKeys = [
+  ['purchase_orders', 'fk_po_cancelled_by', 'FOREIGN KEY (cancelled_by) REFERENCES users (id)'],
 ];
 
 export async function ensureSchema() {
@@ -265,5 +279,13 @@ export async function ensureSchema() {
       [table, column]
     );
     if (rows.length === 0) await pool.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+  for (const [table, name, definition] of addedForeignKeys) {
+    const [rows] = await pool.query(
+      `SELECT 1 FROM information_schema.TABLE_CONSTRAINTS
+       WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ?`,
+      [table, name]
+    );
+    if (rows.length === 0) await pool.query(`ALTER TABLE ${table} ADD CONSTRAINT ${name} ${definition}`);
   }
 }

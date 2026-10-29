@@ -123,6 +123,10 @@ erDiagram
         datetime approved_at
         int received_by FK
         datetime received_at
+        int cancelled_by FK
+        datetime cancelled_at
+        varchar cancel_reason
+        int version "optimistic lock for draft edits"
         timestamp created_at
         timestamp updated_at
     }
@@ -205,7 +209,7 @@ erDiagram
     %% Buying
     suppliers ||--o{ purchase_orders : "supplies"
     warehouses ||--o{ purchase_orders : "receives"
-    users ||--o{ purchase_orders : "creates / approves / receives"
+    users ||--o{ purchase_orders : "creates / approves / receives / cancels"
     purchase_orders ||--|{ purchase_order_items : "contains"
     products ||--o{ purchase_order_items : "ordered as"
 

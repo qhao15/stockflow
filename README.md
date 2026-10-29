@@ -14,7 +14,7 @@
 
 StockFlow tracks products across multiple warehouses, handles purchase orders from suppliers and sales orders to customers, and keeps every stock change traceable through a movement ledger instead of a single editable number.
 
-> **Status:** in active development. Authentication, role-based access, the database schema with demo data, products, and warehouses with stock and transfers are done; orders and reports are being built step by step (see [Roadmap](#roadmap)).
+> **Status:** in active development. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, and purchase orders are done; sales orders and reports are being built step by step (see [Roadmap](#roadmap)).
 
 ## Tech stack
 
@@ -50,10 +50,14 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
   - Movement history per product, showing the order or transfer behind every change.
   - Transfers between warehouses and stock adjustments (stock take, damaged, lost, found) for Managers and Admins.
   - Warehouse management for Admins: add, edit, deactivate (only when empty), delete (only when never used).
+- **Purchase orders** (Managers and Admins, see [Purchase orders module](#purchase-orders-module)):
+  - List with status chips and filters (status, supplier, warehouse, date range, PO number or supplier search).
+  - Draft form with a product search box, quantities, unit costs and live line totals.
+  - Detail page with a history timeline and Edit / Approve / Receive / Cancel buttons shown by status and permission.
+  - Receiving adds every line to the warehouse's stock in one transaction.
 
 ### Planned
 
-- **Purchase orders**: `draft → approved → received`; receiving increases stock
 - **Sales orders**: creating an order decreases stock, cancelling returns it; PDF invoices
 - **Customers & suppliers**: contact info and order history
 - **Dashboard charts**: revenue by day/month, top-selling products, low-stock list
@@ -73,7 +77,7 @@ The tables are defined in [`server/src/db/schema.js`](server/src/db/schema.js) a
 | Catalog | `categories`, `products` | SKU is unique; `min_stock` drives low-stock alerts; `version` for optimistic locking on edits |
 | Warehouses | `warehouses`, `stock` | `stock` has one row per product per warehouse, with `CHECK (quantity >= 0)` and a `version` column |
 | Stock ledger | `stock_movements`, `stock_transfers` | Signed `quantity_change`, `balance_after`, type, and a reference to the order or transfer that caused it |
-| Buying | `suppliers`, `purchase_orders`, `purchase_order_items` | Status `draft → approved → received` (or `cancelled`), with who approved/received and when |
+| Buying | `suppliers`, `purchase_orders`, `purchase_order_items` | Status `draft → approved → received` (or `cancelled`), with who approved/received/cancelled and when; `version` for draft edits |
 | Selling | `customers`, `sales_orders`, `sales_order_items` | Status `completed` or `cancelled`; prices are copied onto items so later price changes don't rewrite old invoices |
 | Audit | `audit_logs` | Who did what to which record, with old and new values as JSON |
 
@@ -139,6 +143,17 @@ Product brands are real; suppliers, customers and people are fictional. SKUs fol
 - **Warehouses.** A warehouse can only be deactivated when it is empty, and inactive warehouses can't receive stock. Deactivating locks the warehouse row, and transfers share-lock it, so the two can't overlap.
 - **Tests.** [`server/tests/stock.test.js`](server/tests/stock.test.js) runs against a real database (`npm test --prefix server`): two concurrent transfers of the last units, 20 transfers in opposite directions at once, a failure half-way, stock never below 0, and a stale adjustment. After each test it checks that every stock row equals the sum of its movements.
 
+## Purchase orders module
+
+- **Guarded status changes.** Each step is a single `UPDATE ... WHERE id = ? AND status = '<expected>'`. If it changes 0 rows, someone else got there first, and the API explains why (`409`: already approved, already received, cancelled).
+- **Receiving can't add stock twice.** The `approved → received` update runs first, inside the same transaction as the stock changes. A second click or another tab waits for the row lock, then finds the PO already received and stops before touching stock.
+- **All or nothing.** Every line goes through the shared `changeStock(...)`, writing a `purchase_receipt` movement linked to the PO. An error on any line rolls back the whole receipt, including the status change, so the PO stays approved and can be received again.
+- **No deadlocks between receipts.** Lines are locked in product order, so two receipts with overlapping products wait for each other instead of deadlocking.
+- **Draft edits use optimistic locking**, like products: saving sends the loaded `version`, and an outdated save gets `409` instead of overwriting someone else's changes. Saving replaces all lines and recalculates the total.
+- **Exact money.** Line totals and the order total are calculated in cents, and unit costs are validated as text, so `3 × 0.29` is exactly `0.87`.
+- **Tests** ([`server/tests/purchaseOrders.test.js`](server/tests/purchaseOrders.test.js)): two receives of the same PO at the same moment (stock added once), an error on line 2 (line 1 rolled back too), the status rules, an outdated draft edit, and exact totals.
+- **Not included yet:** partial deliveries (receiving 30 of 50 now and the rest later) and updating the product's cost price from the last purchase.
+
 ## Roles and permissions
 
 Routes check **permissions**, not role names. The mapping from role to permissions lives in one file, [`server/src/auth/permissions.js`](server/src/auth/permissions.js), so changing what a role can do is a one-line change. `/api/auth/me` returns the user's permission list, and the client uses it only to decide what to show. Every API request is checked again on the server, so hiding a button is never the only protection.
@@ -147,7 +162,7 @@ Routes check **permissions**, not role names. The mapping from role to permissio
 | ----------------- | ---------------------- | ------------------------------------ | ----- |
 | Products          | view                   | view, manage                         | all   |
 | Stock             | view                   | view, transfer, adjust               | all   |
-| Purchase orders   | –                      | view, create, approve, receive       | all   |
+| Purchase orders   | –                      | view, create, approve, receive, cancel | all   |
 | Sales orders      | view, create           | view, create, cancel                 | all   |
 | Customers         | view, manage           | view, manage                         | all   |
 | Suppliers         | –                      | view, manage                         | all   |
@@ -178,11 +193,12 @@ stockflow/
 │   ├── public/logo.svg         # Logo / favicon
 │   └── src/
 │       ├── auth/               # AuthContext, login and permission guards, login/register layout
-│       ├── components/         # Layout (sidebar + top bar), Logo
+│       ├── components/         # Layout (sidebar + top bar), Logo, ProductPicker
 │       ├── lib/                # api.js (Axios, token, 401 handling), agGrid.js, flash.js
 │       ├── pages/              # Login, Register, Dashboard, Account, Users
 │       │   ├── admin/          # Users & Settings page, warehouses tab
 │       │   ├── products/       # Product grid, product/import dialogs, categories tab
+│       │   ├── purchaseOrders/ # PO list, draft form, detail page with status actions
 │       │   └── stock/          # Stock grid, movement history, transfer/adjust dialogs
 │       ├── navItems.js         # Sidebar / module definitions
 │       └── theme.js            # MUI theme
@@ -195,11 +211,11 @@ stockflow/
 │   ├── src/
 │   │   ├── auth/               # permissions.js (role -> permission matrix), middleware.js (JWT + permission checks)
 │   │   ├── db/                 # pool.js (MySQL pool + auto-create database), schema.js (tables, created on startup)
-│   │   ├── routes/             # API routes (health, auth, users, account, categories, products, warehouses, stock)
-│   │   ├── services/           # Product and stock queries, stock ledger (changeStock, transfers, adjustments), Excel
-│   │   ├── validators/         # common.js (email/password), product.js (shared by the API and the import), stock.js
+│   │   ├── routes/             # API routes (health, auth, users, account, categories, products, warehouses, stock, suppliers, purchase orders)
+│   │   ├── services/           # Product, stock and purchase order logic, stock ledger (changeStock, transfers, adjustments), Excel
+│   │   ├── validators/         # common.js (email/password), product.js (shared by the API and the import), stock.js, purchaseOrder.js
 │   │   └── index.js            # App entry point
-│   └── tests/stock.test.js     # Stock ledger and concurrency tests (npm test)
+│   └── tests/                  # Stock ledger and purchase order tests, incl. concurrency (npm test)
 ├── ERD.md                      # Entity Relationship Diagram
 ├── SECURITY.md                 # How to report a vulnerability
 └── package.json                # Root scripts (run both apps together)
@@ -317,6 +333,14 @@ Passwords must be at least 8 characters. This is also the way to reset a forgott
 | GET    | `/api/stock/adjustment-reasons` | `stock.view` | Reasons for adjustments |
 | POST   | `/api/stock/transfers` | `stock.transfer` | Move `quantity` of `productId` from `fromWarehouseId` to `toWarehouseId`; `409` if there isn't enough stock |
 | POST   | `/api/stock/adjustments` | `stock.adjust` | Set `productId` in `warehouseId` to `countedQuantity` with a `reason`; `409` if stock no longer equals `expectedQuantity` |
+| GET    | `/api/suppliers`     | `suppliers.view` | Suppliers for pickers |
+| GET    | `/api/purchase-orders` | `purchase_orders.view` | List with `offset`, `limit`, `sort`, `dir`, `status`, `supplierId`, `warehouseId`, `from`, `to`, `search` |
+| GET    | `/api/purchase-orders/:id` | `purchase_orders.view` | One PO with its lines and who created / approved / received / cancelled it |
+| POST   | `/api/purchase-orders` | `purchase_orders.create` | Create a draft: `supplierId`, `warehouseId`, `expectedDate`, `note`, `items: [{ productId, quantity, unitCost }]` |
+| PUT    | `/api/purchase-orders/:id` | `purchase_orders.create` | Replace a draft (same body plus `version`; `409` if someone else saved first or it's no longer a draft) |
+| POST   | `/api/purchase-orders/:id/approve` | `purchase_orders.approve` | Draft → approved |
+| POST   | `/api/purchase-orders/:id/receive` | `purchase_orders.receive` | Approved → received; adds every line to the warehouse's stock in one transaction |
+| POST   | `/api/purchase-orders/:id/cancel` | `purchase_orders.cancel` | Draft or approved → cancelled, with a required `reason` |
 
 Missing or expired token → `401`; valid token without the permission → `403`.
 
@@ -328,7 +352,7 @@ Logging out is handled on the client by discarding the token.
 - **Branches and pull requests:** `main` is protected. Work happens on a branch (e.g. `feature/sales-orders`) and is merged through a pull request; `Closes #N` in the PR closes the issue and moves its card to Done.
 - **CI ([GitHub Actions](.github/workflows/ci.yml)):** every push and pull request runs two checks, and both must pass before merging:
   - **Client build:** installs the client with `npm ci` and builds it.
-  - **Server checks:** syntax-checks every server file, runs the stock tests (including concurrent transfers) against MySQL, then starts the API against a fresh MySQL 8 database and checks that `/api/health` reports it connected, which also proves the schema can be created from scratch.
+  - **Server checks:** syntax-checks every server file, runs the stock and purchase order tests (including concurrent transfers and receipts) against MySQL, then starts the API against a fresh MySQL 8 database and checks that `/api/health` reports it connected, which also proves the schema can be created from scratch.
 - **Dependencies:** [Dependabot](.github/dependabot.yml) opens monthly PRs with minor and patch updates, grouped so packages that must match (React, MUI, AG Grid, Vite) move together. Major versions are upgraded by hand on a branch, with testing. Security fixes arrive as soon as a vulnerability is published.
 - **Security:** CodeQL scans the code on every push, and secret scanning with push protection blocks commits that contain credentials. See [SECURITY.md](SECURITY.md) to report a vulnerability.
 - **Releases:** each finished milestone is tagged as a [release](https://github.com/qhao15/stockflow/releases) using semantic versioning (`v0.1.0`, `v0.2.0`, …), with notes on what it includes.
@@ -348,7 +372,7 @@ Progress is tracked on the [project board](https://github.com/users/qhao15/proje
 **[v0.2 Stock & orders](https://github.com/qhao15/stockflow/milestone/2)**
 
 - [x] Warehouses, stock and transfers ([#6](https://github.com/qhao15/stockflow/issues/6))
-- [ ] Purchase orders ([#7](https://github.com/qhao15/stockflow/issues/7))
+- [x] Purchase orders ([#7](https://github.com/qhao15/stockflow/issues/7))
 - [ ] Sales orders and PDF invoices ([#8](https://github.com/qhao15/stockflow/issues/8))
 - [ ] Customers and suppliers ([#9](https://github.com/qhao15/stockflow/issues/9))
 

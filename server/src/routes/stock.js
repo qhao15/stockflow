@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { withTransaction } from '../db/pool.js';
 import { requireAuth, requirePermission } from '../auth/middleware.js';
 import { listMovements, listStock } from '../services/stock.js';
-import { ADJUSTMENT_REASONS, StockError, adjustStock, transferStock } from '../services/stockLedger.js';
+import { ADJUSTMENT_REASONS, adjustStock, transferStock } from '../services/stockLedger.js';
+import { sendAppError } from '../services/errors.js';
 import { validateAdjustment, validateTransfer } from '../validators/stock.js';
 import { apiLimiter } from '../auth/rateLimit.js';
 
@@ -16,12 +17,6 @@ const paging = (query) => ({
   offset: Math.max(0, Number.parseInt(query.offset, 10) || 0),
   limit: Math.min(500, Math.max(1, Number.parseInt(query.limit, 10) || 50)),
 });
-
-// Business-rule failures (not enough stock, inactive warehouse...) carry their own status.
-function sendStockError(res, err, next) {
-  if (err instanceof StockError) return res.status(err.status).json({ message: err.message, ...err.details });
-  next(err);
-}
 
 // GET /api/stock?offset=&limit=&sort=&dir=&search=&categoryId=&status=&warehouseId=&lowStock=
 router.get('/', canView, async (req, res, next) => {
@@ -54,7 +49,7 @@ router.post('/transfers', requirePermission('stock.transfer'), async (req, res, 
     const transfer = await withTransaction((conn) => transferStock(conn, { ...values, userId: req.user.id }));
     res.status(201).json({ transfer });
   } catch (err) {
-    sendStockError(res, err, next);
+    sendAppError(res, err, next);
   }
 });
 
@@ -66,7 +61,7 @@ router.post('/adjustments', requirePermission('stock.adjust'), async (req, res, 
     const adjustment = await withTransaction((conn) => adjustStock(conn, { ...values, userId: req.user.id }));
     res.status(201).json({ adjustment });
   } catch (err) {
-    sendStockError(res, err, next);
+    sendAppError(res, err, next);
   }
 });
 

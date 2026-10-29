@@ -18,6 +18,7 @@ export const PERMISSIONS = {
   'purchase_orders.create': MANAGEMENT,
   'purchase_orders.approve': MANAGEMENT,
   'purchase_orders.receive': MANAGEMENT,
+  'purchase_orders.cancel': MANAGEMENT,
 
   'sales_orders.view': ALL,
   'sales_orders.create': ALL,

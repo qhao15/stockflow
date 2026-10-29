@@ -45,7 +45,8 @@ export default function Layout() {
   const visibleItems = navItems.filter((item) => can(item.permission));
   const current = location.pathname === '/account'
     ? { label: 'Account settings' }
-    : navItems.find((item) => item.path === location.pathname);
+    : navItems.find((item) => item.path === location.pathname)
+      ?? navItems.find((item) => item.path !== '/' && location.pathname.startsWith(`${item.path}/`));
 
   // The mobile drawer always opens full width; collapsing only applies on desktop.
   const sidebarWidth = collapsed ? collapsedWidth : drawerWidth;
