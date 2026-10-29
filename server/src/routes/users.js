@@ -2,8 +2,11 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { ROLES } from '../auth/permissions.js';
 import { publicUser, requireAuth, requirePermission } from '../auth/middleware.js';
+import { apiLimiter } from '../auth/rateLimit.js';
 
 const router = Router();
+
+router.use(apiLimiter);
 
 router.use(requireAuth, requirePermission('users.manage'));
 

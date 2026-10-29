@@ -41,8 +41,7 @@ export default function Users() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700}>Users</Typography>
-      <Typography color="text.secondary" sx={{ mb: 3 }}>
+      <Typography color="text.secondary" sx={{ mb: 2 }}>
         Change roles and deactivate accounts. Changes apply to the user's next request.
       </Typography>
 

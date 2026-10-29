@@ -14,14 +14,14 @@
 
 StockFlow tracks products across multiple warehouses, handles purchase orders from suppliers and sales orders to customers, and keeps every stock change traceable through a movement ledger instead of a single editable number.
 
-> **Status:** in active development. Authentication, role-based access, the database schema with demo data, and the products module are done; stock, orders and reports are being built step by step (see [Roadmap](#roadmap)).
+> **Status:** in active development. Authentication, role-based access, the database schema with demo data, products, and warehouses with stock and transfers are done; orders and reports are being built step by step (see [Roadmap](#roadmap)).
 
 ## Tech stack
 
 | Layer    | Technology                                             |
 | -------- | ------------------------------------------------------ |
 | Frontend | React 18, Vite, Material UI (MUI), AG Grid Community, React Router, Axios |
-| Backend  | Node.js, Express, ExcelJS (Excel import/export), Multer (file uploads) |
+| Backend  | Node.js, Express, ExcelJS (Excel import/export), Multer (file uploads), express-rate-limit |
 | Database | MySQL 8 / MariaDB 10.4+ (via `mysql2`)                 |
 | Auth     | JSON Web Tokens (`jsonwebtoken`), `bcryptjs` password hashing |
 
@@ -45,10 +45,14 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
   - Column show/hide, order and width saved per user on the server.
   - Excel export (respects the current filters) and all-or-nothing Excel import.
   - Category management.
+- **Warehouses and stock** (see [Stock module](#stock-module)):
+  - Stock grid with one column per warehouse; quantities at or below the product's minimum are highlighted.
+  - Movement history per product, showing the order or transfer behind every change.
+  - Transfers between warehouses and stock adjustments (stock take, damaged, lost, found) for Managers and Admins.
+  - Warehouse management for Admins: add, edit, deactivate (only when empty), delete (only when never used).
 
 ### Planned
 
-- **Warehouses & stock**: stock per product per warehouse, transfers between warehouses, low-stock alerts
 - **Purchase orders**: `draft → approved → received`; receiving increases stock
 - **Sales orders**: creating an order decreases stock, cancelling returns it; PDF invoices
 - **Customers & suppliers**: contact info and order history
@@ -124,6 +128,17 @@ Product brands are real; suppliers, customers and people are fictional. SKUs fol
 - **Per-user columns.** Hidden columns, order and width are saved in `user_preferences`, so they follow the user to any browser.
 - **Code splitting.** The Products page, which includes AG Grid, loads only when someone opens it, which keeps the main bundle small.
 
+## Stock module
+
+- **One function changes stock.** `changeStock(conn, {...})` in [`server/src/services/stockLedger.js`](server/src/services/stockLedger.js) locks the stock row, refuses to go below 0, updates the quantity and writes the `stock_movements` row, all in the caller's transaction. Transfers and adjustments use it now; receiving purchase orders and selling will use it too.
+- **Row locks against double-spending.** A transfer locks both stock rows with `SELECT ... FOR UPDATE` before checking the quantity. Two people moving the last 5 units at the same moment are handled one after the other: the first succeeds, the second gets `409 Not enough stock`.
+- **No deadlocks between opposite transfers.** Rows are always locked in the same order (lowest warehouse id first), so Hanoi → HCM and HCM → Hanoi at the same time wait for each other instead of deadlocking. If MySQL still reports a deadlock, the whole transaction is retried.
+- **All or nothing.** The `transfer_out`, the `transfer_in` and the transfer record are written in one transaction; if anything fails half-way, nothing is kept.
+- **Adjustments don't overwrite changes.** The dialog sends the quantity the user saw (`expectedQuantity`). If stock changed while they were counting, for example because of a sale, the adjustment is refused instead of silently undoing it.
+- **Low stock** means at or below the product's `min_stock` in an active warehouse (a warehouse without a stock row counts as 0). The Products and Stock pages share the same rule.
+- **Warehouses.** A warehouse can only be deactivated when it is empty, and inactive warehouses can't receive stock. Deactivating locks the warehouse row, and transfers share-lock it, so the two can't overlap.
+- **Tests.** [`server/tests/stock.test.js`](server/tests/stock.test.js) runs against a real database (`npm test --prefix server`): two concurrent transfers of the last units, 20 transfers in opposite directions at once, a failure half-way, stock never below 0, and a stale adjustment. After each test it checks that every stock row equals the sum of its movements.
+
 ## Roles and permissions
 
 Routes check **permissions**, not role names. The mapping from role to permissions lives in one file, [`server/src/auth/permissions.js`](server/src/auth/permissions.js), so changing what a role can do is a one-line change. `/api/auth/me` returns the user's permission list, and the client uses it only to decide what to show. Every API request is checked again on the server, so hiding a button is never the only protection.
@@ -150,6 +165,7 @@ Admins can't demote or deactivate themselves, so the system always keeps at leas
 - `requirePermission('purchase_orders.approve')` middleware protects routes. It reads the role from the freshly loaded user, not from the token.
 - Changing or resetting a password records `password_changed_at`. Tokens issued before that moment are refused, so a stolen or forgotten session stops working, while the tab that made the change gets a fresh token.
 - Post-login redirects only accept same-site paths, so a crafted `?redirect=` link can't send users to another website.
+- **Rate limiting** ([`server/src/auth/rateLimit.js`](server/src/auth/rateLimit.js)): 10 failed login or register attempts per IP in 15 minutes, which slows down password guessing (successful logins don't count), and 300 requests per minute for the rest of the API. Over the limit the API answers `429` with a message the client shows.
 
 ## Project structure
 
@@ -165,7 +181,9 @@ stockflow/
 │       ├── components/         # Layout (sidebar + top bar), Logo
 │       ├── lib/                # api.js (Axios, token, 401 handling), agGrid.js, flash.js
 │       ├── pages/              # Login, Register, Dashboard, Account, Users
-│       │   └── products/       # Product grid, product/import dialogs, categories tab
+│       │   ├── admin/          # Users & Settings page, warehouses tab
+│       │   ├── products/       # Product grid, product/import dialogs, categories tab
+│       │   └── stock/          # Stock grid, movement history, transfer/adjust dialogs
 │       ├── navItems.js         # Sidebar / module definitions
 │       └── theme.js            # MUI theme
 ├── server/                     # Node.js + Express API
@@ -174,13 +192,14 @@ stockflow/
 │   │   ├── create-user.js      # Create an account with a given role from the CLI
 │   │   ├── seed.js             # Simulate a year of business as demo data
 │   │   └── seed-data.js        # Product catalog, suppliers, warehouses, demo accounts
-│   └── src/
-│       ├── auth/               # permissions.js (role -> permission matrix), middleware.js (JWT + permission checks)
-│       ├── db/                 # pool.js (MySQL pool + auto-create database), schema.js (tables, created on startup)
-│       ├── routes/             # API routes (health, auth, users, account, categories, products)
-│       ├── services/           # Product queries, Excel template/export/import parsing
-│       ├── validators/         # common.js (email/password), product.js (shared by the API and the import)
-│       └── index.js            # App entry point
+│   ├── src/
+│   │   ├── auth/               # permissions.js (role -> permission matrix), middleware.js (JWT + permission checks)
+│   │   ├── db/                 # pool.js (MySQL pool + auto-create database), schema.js (tables, created on startup)
+│   │   ├── routes/             # API routes (health, auth, users, account, categories, products, warehouses, stock)
+│   │   ├── services/           # Product and stock queries, stock ledger (changeStock, transfers, adjustments), Excel
+│   │   ├── validators/         # common.js (email/password), product.js (shared by the API and the import), stock.js
+│   │   └── index.js            # App entry point
+│   └── tests/stock.test.js     # Stock ledger and concurrency tests (npm test)
 ├── ERD.md                      # Entity Relationship Diagram
 ├── SECURITY.md                 # How to report a vulnerability
 └── package.json                # Root scripts (run both apps together)
@@ -289,6 +308,15 @@ Passwords must be at least 8 characters. This is also the way to reset a forgott
 | GET    | `/api/products/export` | `products.view` | Excel file of the products matching the same filters as the list |
 | GET    | `/api/products/import-template` | `products.manage` | Excel template with instructions and the category list |
 | POST   | `/api/products/import` | `products.manage` | Upload `.xlsx` (field `file`); all rows validated first, all or nothing |
+| GET    | `/api/warehouses`    | `stock.view` | Warehouses with units and number of products held |
+| POST   | `/api/warehouses`    | `warehouses.manage` | Create a warehouse (`code`, `name`, `city`, `address`) |
+| PATCH  | `/api/warehouses/:id` | `warehouses.manage` | Edit, or set `isActive`; deactivating a warehouse that still holds stock returns `409` |
+| DELETE | `/api/warehouses/:id` | `warehouses.manage` | Delete a warehouse that was never used; one with history returns `409` |
+| GET    | `/api/stock`         | `stock.view` | Products with their quantity per warehouse: `offset`, `limit`, `sort` (incl. `w<warehouseId>`), `dir`, `search`, `categoryId`, `warehouseId`, `lowStock` |
+| GET    | `/api/stock/movements` | `stock.view` | The ledger for `productId` and/or `warehouseId`, newest first, with the order or transfer number |
+| GET    | `/api/stock/adjustment-reasons` | `stock.view` | Reasons for adjustments |
+| POST   | `/api/stock/transfers` | `stock.transfer` | Move `quantity` of `productId` from `fromWarehouseId` to `toWarehouseId`; `409` if there isn't enough stock |
+| POST   | `/api/stock/adjustments` | `stock.adjust` | Set `productId` in `warehouseId` to `countedQuantity` with a `reason`; `409` if stock no longer equals `expectedQuantity` |
 
 Missing or expired token → `401`; valid token without the permission → `403`.
 
@@ -300,7 +328,7 @@ Logging out is handled on the client by discarding the token.
 - **Branches and pull requests:** `main` is protected. Work happens on a branch (e.g. `feature/sales-orders`) and is merged through a pull request; `Closes #N` in the PR closes the issue and moves its card to Done.
 - **CI ([GitHub Actions](.github/workflows/ci.yml)):** every push and pull request runs two checks, and both must pass before merging:
   - **Client build:** installs the client with `npm ci` and builds it.
-  - **Server checks:** syntax-checks every server file, then starts the API against a fresh MySQL 8 database and checks that `/api/health` reports it connected, which also proves the schema can be created from scratch.
+  - **Server checks:** syntax-checks every server file, runs the stock tests (including concurrent transfers) against MySQL, then starts the API against a fresh MySQL 8 database and checks that `/api/health` reports it connected, which also proves the schema can be created from scratch.
 - **Dependencies:** [Dependabot](.github/dependabot.yml) opens monthly PRs with minor and patch updates, grouped so packages that must match (React, MUI, AG Grid, Vite) move together. Major versions are upgraded by hand on a branch, with testing. Security fixes arrive as soon as a vulnerability is published.
 - **Security:** CodeQL scans the code on every push, and secret scanning with push protection blocks commits that contain credentials. See [SECURITY.md](SECURITY.md) to report a vulnerability.
 - **Releases:** each finished milestone is tagged as a [release](https://github.com/qhao15/stockflow/releases) using semantic versioning (`v0.1.0`, `v0.2.0`, …), with notes on what it includes.
@@ -319,7 +347,7 @@ Progress is tracked on the [project board](https://github.com/users/qhao15/proje
 
 **[v0.2 Stock & orders](https://github.com/qhao15/stockflow/milestone/2)**
 
-- [ ] Warehouses, stock and transfers ([#6](https://github.com/qhao15/stockflow/issues/6))
+- [x] Warehouses, stock and transfers ([#6](https://github.com/qhao15/stockflow/issues/6))
 - [ ] Purchase orders ([#7](https://github.com/qhao15/stockflow/issues/7))
 - [ ] Sales orders and PDF invoices ([#8](https://github.com/qhao15/stockflow/issues/8))
 - [ ] Customers and suppliers ([#9](https://github.com/qhao15/stockflow/issues/9))

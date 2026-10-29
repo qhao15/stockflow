@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { requireAuth, requirePermission } from '../auth/middleware.js';
+import { apiLimiter } from '../auth/rateLimit.js';
 
 const router = Router();
 
+router.use(apiLimiter);
 router.use(requireAuth);
 
 function validateCategory(body, { partial = false } = {}) {

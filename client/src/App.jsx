@@ -8,17 +8,19 @@ import Dashboard from './pages/Dashboard';
 import ComingSoon from './pages/ComingSoon';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Users from './pages/Users';
+import AdminPage from './pages/admin/AdminPage';
 import Account from './pages/Account';
 import { navItems } from './navItems';
 
 // Loaded on first visit: AG Grid is large, and not every user opens these pages.
 const ProductsPage = lazy(() => import('./pages/products/ProductsPage'));
+const StockPage = lazy(() => import('./pages/stock/StockPage'));
 
 // Modules that have a real page; the rest show "Coming soon" for now.
 const pages = {
-  '/admin': Users,
+  '/admin': AdminPage,
   '/products': ProductsPage,
+  '/stock': StockPage,
 };
 
 export default function App() {

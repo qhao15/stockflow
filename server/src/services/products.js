@@ -1,13 +1,14 @@
 import { pool } from '../db/pool.js';
+import { lowStockCount } from './stock.js';
 
 // Product rows with their category and stock summary: total across warehouses, and in
-// how many warehouses the quantity is at or below min_stock (low stock). in_use: the
+// how many active warehouses the quantity is at or below min_stock (low stock). in_use: the
 // product appears in orders, transfers or the stock ledger, so it can't be deleted.
 const SELECT_PRODUCTS = `
   SELECT p.id, p.sku, p.name, p.category_id, c.name AS category_name, c.code AS category_code,
          p.brand, p.unit, p.cost_price, p.sale_price, p.min_stock, p.image_url, p.description,
          p.is_active, p.version, p.created_at, p.updated_at,
-         COALESCE(s.total, 0) AS stock_total, COALESCE(s.low, 0) AS low_warehouses,
+         COALESCE(s.total, 0) AS stock_total, ${lowStockCount('p')} AS low_warehouses,
          (EXISTS (SELECT 1 FROM stock_movements m WHERE m.product_id = p.id)
            OR EXISTS (SELECT 1 FROM sales_order_items si WHERE si.product_id = p.id)
            OR EXISTS (SELECT 1 FROM purchase_order_items pi WHERE pi.product_id = p.id)
@@ -15,9 +16,7 @@ const SELECT_PRODUCTS = `
   FROM products p
   JOIN categories c ON c.id = p.category_id
   LEFT JOIN (
-    SELECT st.product_id, SUM(st.quantity) AS total, SUM(st.quantity <= pr.min_stock) AS low
-    FROM stock st JOIN products pr ON pr.id = st.product_id
-    GROUP BY st.product_id
+    SELECT product_id, SUM(quantity) AS total FROM stock GROUP BY product_id
   ) s ON s.product_id = p.id`;
 
 // Sortable columns (API name -> SQL). Anything else falls back to the default order.
@@ -83,7 +82,7 @@ function buildFilters(query) {
   }
   if (query.status === 'active') where.push('p.is_active = 1');
   else if (query.status === 'inactive') where.push('p.is_active = 0');
-  if (query.lowStock === 'true' || query.lowStock === '1') where.push('s.low > 0');
+  if (query.lowStock === 'true' || query.lowStock === '1') where.push(`${lowStockCount('p')} > 0`);
   return { sql: where.length ? `WHERE ${where.join(' AND ')}` : '', params };
 }
 

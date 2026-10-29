@@ -9,6 +9,8 @@ import usersRouter from './routes/users.js';
 import accountRouter from './routes/account.js';
 import categoriesRouter from './routes/categories.js';
 import productsRouter from './routes/products.js';
+import warehousesRouter from './routes/warehouses.js';
+import stockRouter from './routes/stock.js';
 
 dotenv.config();
 
@@ -29,6 +31,8 @@ app.use('/api/users', usersRouter);
 app.use('/api/account', accountRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/products', productsRouter);
+app.use('/api/warehouses', warehousesRouter);
+app.use('/api/stock', stockRouter);
 
 app.use((req, res) => res.status(404).json({ message: 'Not found' }));
 
