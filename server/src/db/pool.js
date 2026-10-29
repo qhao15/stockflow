@@ -28,3 +28,24 @@ export const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
 });
+
+const RETRYABLE = new Set(['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT']);
+
+// Runs fn(conn) in a transaction: commit if it resolves, roll back if it throws.
+// A deadlock rolls the whole transaction back in MySQL, so it is safe to run it again.
+export async function withTransaction(fn, { retries = 2 } = {}) {
+  for (let attempt = 0; ; attempt += 1) {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const result = await fn(conn);
+      await conn.commit();
+      return result;
+    } catch (err) {
+      await conn.rollback().catch(() => {});
+      if (!RETRYABLE.has(err.code) || attempt >= retries) throw err;
+    } finally {
+      conn.release();
+    }
+  }
+}

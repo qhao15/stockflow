@@ -9,7 +9,8 @@
     "start": "node src/index.js",
     "create-admin": "node scripts/create-user.js --admin",
     "create-user": "node scripts/create-user.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "test": "node --test tests/stock.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
