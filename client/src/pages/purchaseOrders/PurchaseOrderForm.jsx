@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Alert, Box, Button, Card, CardContent, IconButton, MenuItem, Skeleton, Stack, Table, TableBody, TableCell,
   TableHead, TableRow, TextField, Tooltip, Typography,
@@ -26,7 +26,9 @@ export default function PurchaseOrderForm() {
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const [options, setOptions] = useState(null);
-  const [form, setForm] = useState(emptyForm);
+  // Coming from a supplier's page ("New purchase order"): start with that supplier picked.
+  const location = useLocation();
+  const [form, setForm] = useState({ ...emptyForm, supplierId: location.state?.supplierId ?? '' });
   const [version, setVersion] = useState(null);
   const [poNumber, setPoNumber] = useState('');
   const [loadError, setLoadError] = useState('');
@@ -34,11 +36,11 @@ export default function PurchaseOrderForm() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const requests = [api.get('/suppliers'), api.get('/warehouses')];
+    const requests = [api.get('/suppliers', { params: { limit: 500 } }), api.get('/warehouses')];
     if (isEdit) requests.push(api.get(`/purchase-orders/${id}`));
     Promise.all(requests)
       .then(([s, w, po]) => {
-        setOptions({ suppliers: s.data.suppliers, warehouses: w.data.warehouses });
+        setOptions({ suppliers: s.data.rows, warehouses: w.data.warehouses });
         if (!po) return;
         const order = po.data.purchaseOrder;
         if (order.status !== 'draft') {

@@ -8,3 +8,11 @@ export function formatDate(value) {
 }
 
 export const formatDateTime = (value) => (value ? new Date(value).toLocaleString() : '');
+
+// Days since a date, as "today", "yesterday" or "12 days ago".
+export function daysAgo(value) {
+  if (!value) return '';
+  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
+  if (days <= 0) return 'today';
+  return days === 1 ? 'yesterday' : `${days.toLocaleString()} days ago`;
+}

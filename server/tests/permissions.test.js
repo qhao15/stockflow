@@ -47,7 +47,9 @@ const ROUTES = [
   ['sales_orders.create', 'POST', '/sales-orders', {}],
   ['sales_orders.cancel', 'POST', '/sales-orders/999999999/cancel', {}],
   ['customers.view', 'GET', '/customers?limit=1'],
+  ['customers.manage', 'POST', '/customers', {}],
   ['suppliers.view', 'GET', '/suppliers'],
+  ['suppliers.manage', 'POST', '/suppliers', {}],
   ['users.manage', 'GET', '/users'],
 ];
 

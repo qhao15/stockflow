@@ -11,7 +11,7 @@ export const PO_STATUSES = ['draft', 'approved', 'received', 'cancelled'];
 
 const SELECT_ORDERS = `
   SELECT po.id, po.po_number, po.status, po.order_date, po.expected_date, po.total_amount, po.note,
-         po.supplier_id, s.name AS supplier_name, po.warehouse_id, w.code AS warehouse_code, w.name AS warehouse_name,
+         po.supplier_id, s.code AS supplier_code, s.name AS supplier_name, po.warehouse_id, w.code AS warehouse_code, w.name AS warehouse_name,
          po.created_by, cu.name AS created_by_name,
          po.approved_by, au.name AS approved_by_name, po.approved_at,
          po.received_by, ru.name AS received_by_name, po.received_at,
@@ -38,7 +38,7 @@ function toOrder(row) {
     expectedDate: row.expected_date,
     totalAmount: Number(row.total_amount),
     note: row.note,
-    supplier: { id: row.supplier_id, name: row.supplier_name },
+    supplier: { id: row.supplier_id, code: row.supplier_code, name: row.supplier_name },
     warehouse: { id: row.warehouse_id, code: row.warehouse_code, name: row.warehouse_name },
     itemCount: Number(row.item_count),
     unitCount: Number(row.unit_count),

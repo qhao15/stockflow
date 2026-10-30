@@ -469,8 +469,8 @@ async function write(data, sim) {
       categories.map((c) => [c.id, c.code, c.name, c.description, createdAt]));
     await insert(conn, 'warehouses', ['id', 'code', 'name', 'city', 'address', 'created_at'],
       warehouses.map((w) => [w.id, w.code, w.name, w.city, w.address, createdAt]));
-    await insert(conn, 'suppliers', ['id', 'code', 'name', 'contact_name', 'email', 'phone', 'address', 'created_at'],
-      suppliers.map((s) => [s.id, s.code, s.name, s.contact, s.email, s.phone, s.address, createdAt]));
+    await insert(conn, 'suppliers', ['id', 'code', 'name', 'contact_name', 'email', 'phone', 'city', 'address', 'created_at'],
+      suppliers.map((s) => [s.id, s.code, s.name, s.contact, s.email, s.phone, s.address.split(',').pop().trim(), s.address, createdAt]));
     await insert(conn, 'customers', ['id', 'code', 'name', 'contact_name', 'email', 'phone', 'city', 'address', 'created_at'],
       customers.map((c) => [c.id, c.code, c.name, c.contact, c.email, c.phone, c.city, c.address, c.createdAt]));
     await insert(conn, 'products',

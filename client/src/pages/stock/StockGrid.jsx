@@ -78,7 +78,7 @@ export default function StockGrid({ options }) {
   const columnDefs = useMemo(() => [
     { colId: 'sku', field: 'sku', headerName: 'SKU', width: 200, minWidth: 200, pinned: 'left', cellStyle: { fontFamily: 'monospace', fontSize: 12 } },
     { colId: 'name', field: 'name', headerName: 'Name', flex: 1, minWidth: 250 },
-    { colId: 'category', field: 'categoryName', headerName: 'Category', width: 120, minWidth: 120 },
+    { colId: 'category', field: 'categoryName', headerName: 'Category', width: 120, minWidth: 120, cellStyle: center, headerClass: 'header-center' },
     { colId: 'minStock', field: 'minStock', headerName: 'Min stock', width: 95, minWidth: 95, cellStyle: center, headerClass: 'header-center' },
     ...shownWarehouses.map((w) => ({
       colId: `w${w.id}`,
