@@ -61,7 +61,9 @@ const tables = [
     contact_name VARCHAR(100) NULL,
     email VARCHAR(255) NULL,
     phone VARCHAR(30) NULL,
+    city VARCHAR(100) NULL,
     address VARCHAR(255) NULL,
+    notes VARCHAR(1000) NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -76,6 +78,7 @@ const tables = [
     phone VARCHAR(30) NULL,
     city VARCHAR(100) NULL,
     address VARCHAR(255) NULL,
+    notes VARCHAR(1000) NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -266,12 +269,18 @@ const addedColumns = [
   // Cost at the time of sale, for profit reports. Existing rows are filled from the
   // product's cost price once, when the column is added (see backfills below).
   ['sales_order_items', 'unit_cost', 'DECIMAL(12, 2) NOT NULL DEFAULT 0 AFTER unit_price'],
+  ['customers', 'notes', 'VARCHAR(1000) NULL AFTER address'],
+  ['suppliers', 'city', 'VARCHAR(100) NULL AFTER phone'],
+  ['suppliers', 'notes', 'VARCHAR(1000) NULL AFTER address'],
 ];
 
 // Runs once, right after its column is added.
 const backfills = {
   'sales_order_items.unit_cost': `UPDATE sales_order_items i JOIN products p ON p.id = i.product_id
                                   SET i.unit_cost = p.cost_price`,
+  // Seeded addresses end with the city ("12 Le Loi, Da Nang").
+  'suppliers.city': `UPDATE suppliers SET city = TRIM(SUBSTRING_INDEX(address, ',', -1))
+                     WHERE city IS NULL AND address LIKE '%,%'`,
 };
 
 // Foreign keys for columns added above (new databases get them from CREATE TABLE).

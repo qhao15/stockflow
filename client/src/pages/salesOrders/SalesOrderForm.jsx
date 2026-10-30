@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Alert, Box, Button, Card, CardContent, IconButton, MenuItem, Skeleton, Stack, Table, TableBody, TableCell,
   TableHead, TableRow, TextField, Tooltip, Typography,
@@ -19,8 +19,10 @@ const cents = (amount) => Math.round(Number(amount) * 100);
 // warehouse; the server checks it again under a row lock when the order is saved.
 export default function SalesOrderForm() {
   const navigate = useNavigate();
+  // Coming from a customer's page ("New order"): start with that customer picked.
+  const location = useLocation();
   const [warehouses, setWarehouses] = useState(null);
-  const [customer, setCustomer] = useState(null);
+  const [customer, setCustomer] = useState(location.state?.customer ?? null);
   const [warehouseId, setWarehouseId] = useState('');
   const [discount, setDiscount] = useState('');
   const [note, setNote] = useState('');

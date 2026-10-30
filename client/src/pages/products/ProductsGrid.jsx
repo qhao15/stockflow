@@ -164,8 +164,8 @@ export default function ProductsGrid({ options }) {
     return [
       { colId: 'sku', field: 'sku', headerName: 'SKU', width: 200, minWidth: 200, pinned: 'left', cellStyle: { fontFamily: 'monospace', fontSize: 12 } },
       { colId: 'name', field: 'name', headerName: 'Name', flex: 1, minWidth: 250 },
-      { colId: 'category', field: 'categoryName', headerName: 'Category', width: 120, minWidth: 120 },
-      { colId: 'brand', field: 'brand', headerName: 'Brand', width: 100, minWidth: 100 },
+      { colId: 'category', field: 'categoryName', headerName: 'Category', width: 120, minWidth: 120, cellStyle: { textAlign: 'center', justifyContent: 'center' }, headerClass: 'header-center' },
+      { colId: 'brand', field: 'brand', headerName: 'Brand', width: 100, minWidth: 100, cellStyle: { textAlign: 'center', justifyContent: 'center' }, headerClass: 'header-center' },
       { colId: 'unit', field: 'unit', headerName: 'Unit', width: 70, minWidth: 70 },
       priceCol('costPrice', 'Cost price'),
       priceCol('salePrice', 'Sale price'),
@@ -181,8 +181,13 @@ export default function ProductsGrid({ options }) {
         editable: canManage, cellEditor: 'agNumberCellEditor', cellEditorParams: { min: 0, precision: 0 },
         cellClass: canManage ? 'editable-cell' : undefined,
       },
-      { colId: 'stock', headerName: 'Stock', width: 90, minWidth: 90, cellRenderer: StockCell },
-      { colId: 'status', headerName: 'Status', width: 90, minWidth: 90, sortable: false, cellRenderer: StatusCell },
+      { colId: 'stock', headerName: 'Stock', width: 90, minWidth: 90, headerClass: 'header-center', cellRenderer: StockCell },
+      {
+        colId: 'status', headerName: 'Status', width: 90, minWidth: 90, sortable: false, headerClass: 'header-center',
+        // The chip is an element, so it's centered with flex rather than text-align.
+        cellStyle: { display: 'flex', alignItems: 'center', justifyContent: 'center' },
+        cellRenderer: StatusCell,
+      },
       {
         colId: 'updatedAt', field: 'updatedAt', headerName: 'Updated', width: 170, hide: true,
         valueFormatter: ({ value }) => (value ? new Date(value).toLocaleString() : ''),

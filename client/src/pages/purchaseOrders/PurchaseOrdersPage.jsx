@@ -26,8 +26,8 @@ export default function PurchaseOrdersPage() {
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
-    Promise.all([api.get('/suppliers'), api.get('/warehouses')])
-      .then(([s, w]) => setOptions({ suppliers: s.data.suppliers, warehouses: w.data.warehouses }))
+    Promise.all([api.get('/suppliers', { params: { limit: 500 } }), api.get('/warehouses')])
+      .then(([s, w]) => setOptions({ suppliers: s.data.rows, warehouses: w.data.warehouses }))
       .catch((err) => setToast({ severity: 'error', message: errorMessage(err, 'Could not load suppliers and warehouses') }));
   }, []);
 
@@ -72,18 +72,18 @@ export default function PurchaseOrdersPage() {
         </Link>
       ),
     },
-    { colId: 'orderDate', field: 'orderDate', headerName: 'Order date', width: 120, minWidth: 120, valueFormatter: ({ value }) => formatDate(value) },
     { colId: 'supplier', headerName: 'Supplier', flex: 1, minWidth: 200, valueGetter: ({ data }) => data?.supplier.name },
     { colId: 'warehouse', headerName: 'Warehouse', width: 110, minWidth: 110, cellStyle: center, headerClass: 'header-center', valueGetter: ({ data }) => data?.warehouse.code },
     { colId: 'items', headerName: 'Lines', width: 80, minWidth: 80, sortable: false, cellStyle: center, headerClass: 'header-center', valueGetter: ({ data }) => data?.itemCount },
     { colId: 'units', headerName: 'Units', width: 90, minWidth: 90, sortable: false, cellStyle: center, headerClass: 'header-center', valueGetter: ({ data }) => data?.unitCount.toLocaleString() },
     { colId: 'totalAmount', field: 'totalAmount', headerName: 'Total', width: 130, minWidth: 130, cellStyle: center, headerClass: 'header-center', valueFormatter: ({ value }) => (value == null ? '' : money.format(value)) },
-    { colId: 'expectedDate', field: 'expectedDate', headerName: 'Expected', width: 100, minWidth: 100, valueFormatter: ({ value }) => formatDate(value) },
+    { colId: 'orderDate', field: 'orderDate', headerName: 'Order date', width: 110, minWidth: 110, cellStyle: center, headerClass: 'header-center', valueFormatter: ({ value }) => formatDate(value) },
+    { colId: 'expectedDate', field: 'expectedDate', headerName: 'Expected', width: 100, minWidth: 100, cellStyle: center, headerClass: 'header-center', valueFormatter: ({ value }) => formatDate(value) },
     {
       colId: 'status', field: 'status', headerName: 'Status', width: 110, minWidth: 110, cellStyle: center, headerClass: 'header-center',
       cellRenderer: ({ value }) => value && <StatusChip status={value} />,
     },
-    { colId: 'createdBy', headerName: 'Created by', width: 120, minWidth: 120, sortable: false, valueGetter: ({ data }) => data?.createdBy?.name },
+    { colId: 'createdBy', headerName: 'Created by', width: 120, minWidth: 120, cellStyle: center, headerClass: 'header-center', sortable: false, valueGetter: ({ data }) => data?.createdBy?.name },
   ], []);
 
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true }), []);

@@ -14,7 +14,7 @@
 
 StockFlow tracks products across multiple warehouses, handles purchase orders from suppliers and sales orders to customers, and keeps every stock change traceable through a movement ledger instead of a single editable number.
 
-> **Status:** in active development. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, purchase orders, and sales orders with PDF invoices are done; customers and suppliers, reports and the audit log are being built step by step (see [Roadmap](#roadmap)).
+> **Status:** in active development, version **0.2.0**. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, purchase orders, sales orders with PDF invoices, and customers and suppliers are done; reports and the audit log are being built step by step (see [Roadmap](#roadmap)).
 
 ## Tech stack
 
@@ -59,10 +59,17 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
   - List with status chips and filters (status, warehouse, date range, order number or customer search).
   - New-order form with customer and product search, the quantity available in the chosen warehouse on every line, an optional discount and live totals.
   - Detail page with a Download invoice button (everyone) and Cancel (Managers and Admins), which returns the stock.
+- **Customers** (Staff, Managers and Admins):
+  - List with search (name, code, contact, phone, email), city and status filters, and orders, revenue and last order per customer, sortable to find the best customers.
+  - Detail page with contact details, totals (orders, revenue, average order, last order) and the order history.
+  - Add and edit, deactivate a customer with orders (delete only one without), and "+ New customer" right inside the sales order form.
+- **Suppliers** (Managers and Admins):
+  - List with received POs, spend, open POs and last PO per supplier.
+  - Detail page with contact details, totals (spend, average PO, open POs and their value) and the purchase order history, plus "New purchase order" with the supplier already picked.
+  - Same add, edit, deactivate and delete rules as customers.
 
 ### Planned
 
-- **Customers & suppliers**: contact info and order history
 - **Dashboard charts**: revenue by day/month, top-selling products, low-stock list
 - **Audit log**: who changed what and when
 
@@ -80,8 +87,8 @@ The tables are defined in [`server/src/db/schema.js`](server/src/db/schema.js) a
 | Catalog | `categories`, `products` | SKU is unique; `min_stock` drives low-stock alerts; `version` for optimistic locking on edits |
 | Warehouses | `warehouses`, `stock` | `stock` has one row per product per warehouse, with `CHECK (quantity >= 0)` and a `version` column |
 | Stock ledger | `stock_movements`, `stock_transfers` | Signed `quantity_change`, `balance_after`, type, and a reference to the order or transfer that caused it |
-| Buying | `suppliers`, `purchase_orders`, `purchase_order_items` | Status `draft → approved → received` (or `cancelled`), with who approved/received/cancelled and when; `version` for draft edits |
-| Selling | `customers`, `sales_orders`, `sales_order_items` | Status `completed` or `cancelled`; prices are copied onto items so later price changes don't rewrite old invoices |
+| Buying | `suppliers`, `purchase_orders`, `purchase_order_items` | Status `draft → approved → received` (or `cancelled`), with who approved/received/cancelled and when; `version` for draft edits. Supplier codes (`SUP-001`) are generated; a supplier with POs can't be deleted |
+| Selling | `customers`, `sales_orders`, `sales_order_items` | Status `completed` or `cancelled`; the unit price and unit cost are copied onto items, so later price changes don't rewrite old invoices and profit can be reported. Customer codes (`CUS-00001`) are generated; a customer with orders can't be deleted |
 | Audit | `audit_logs` | Who did what to which record, with old and new values as JSON |
 
 Design rules:
@@ -167,6 +174,14 @@ Product brands are real; suppliers, customers and people are fictional. SKUs fol
 - **PDF invoices** are generated on the server with PDFKit (`GET /api/sales-orders/:id/invoice.pdf`): seller header, bill-to and ship-from, lines with SKUs, subtotal, discount, total, page numbers, and a CANCELLED stamp on cancelled orders. Noto Sans is embedded so Vietnamese names print correctly. The seller details can be set with the `COMPANY_*` variables.
 - **Tests** ([`server/tests/salesOrders.test.js`](server/tests/salesOrders.test.js)): two orders for the last unit at the same moment, an order with one short line, exact totals and prices copied onto lines, a double cancel, and invoice generation. Each checks that stock still equals the sum of its movements.
 
+## Customers and suppliers module
+
+- **Generated codes.** A new customer gets `CUS-00042` and a new supplier `SUP-010` from its id, so nobody has to invent codes.
+- **Figures that add up.** A customer's orders and revenue count completed orders only. A supplier's spend counts received POs only, and open POs (draft or approved) are shown separately with their value. Cancelled orders still appear in the history (struck through) and as a separate count. The list's figures come from one grouped subquery, so sorting everyone by revenue or spend stays a single query.
+- **History is never broken.** A customer or supplier with any order, even a cancelled one, can't be deleted (`409`), only deactivated: they disappear from the order forms but stay on old orders and invoices, and a new order for them is refused.
+- **Quick add while selling.** The customer search in the sales order form has "+ New customer"; the new customer is selected straight away. Staff can do this, because they take the orders.
+- **Shared validation** for customers and suppliers ([`server/src/validators/contact.js`](server/src/validators/contact.js)): name required, email optional but valid and stored lowercase, phone digits with `+ - ( )` and spaces.
+
 ## Roles and permissions
 
 Routes check **permissions**, not role names. The mapping from role to permissions lives in one file, [`server/src/auth/permissions.js`](server/src/auth/permissions.js), so changing what a role can do is a one-line change. `/api/auth/me` returns the user's permission list, and the client uses it only to decide what to show. Every API request is checked again on the server, so hiding a button is never the only protection.
@@ -206,10 +221,12 @@ stockflow/
 │   ├── public/logo.svg         # Logo / favicon
 │   └── src/
 │       ├── auth/               # AuthContext, login and permission guards, login/register layout
-│       ├── components/         # Layout (sidebar + top bar), Logo, ProductPicker, CustomerPicker
+│       ├── components/         # Layout, Logo, ProductPicker, CustomerPicker, ContactDialog, DetailParts
 │       ├── lib/                # api.js (Axios, token, 401 handling), agGrid.js, flash.js, format.js
 │       ├── pages/              # Login, Register, Dashboard, Account, Users
 │       │   ├── admin/          # Users & Settings page, warehouses tab
+│       │   ├── customers/      # Customer list and detail page with totals and order history
+│       │   ├── suppliers/      # Supplier list and detail page with spend, open POs and PO history
 │       │   ├── products/       # Product grid, product/import dialogs, categories tab
 │       │   ├── purchaseOrders/ # PO list, draft form, detail page with status actions
 │       │   ├── salesOrders/    # Order list, new-order form with available stock, detail with invoice download
@@ -228,7 +245,7 @@ stockflow/
 │   │   ├── db/                 # pool.js (MySQL pool + auto-create database), schema.js (tables, created on startup)
 │   │   ├── routes/             # API routes (health, auth, users, account, categories, products, warehouses, stock, suppliers, customers, purchase and sales orders)
 │   │   ├── services/           # Product, stock and order logic, stock ledger (changeStock, transfers, adjustments), Excel, PDF invoices
-│   │   ├── validators/         # common.js (email/password, cancel reason), product.js (shared by the API and the import), stock.js, orders
+│   │   ├── validators/         # common.js (email/password, cancel reason), product.js (shared by the API and the import), stock.js, orders, contact.js
 │   │   ├── app.js              # Express app: middleware and routes (tests start their own copy)
 │   │   └── index.js            # Entry point: checks .env, prepares the database, starts the server
 │   └── tests/                  # API and service tests against MySQL, incl. concurrency (npm test)
@@ -350,8 +367,19 @@ Passwords must be at least 8 characters. This is also the way to reset a forgott
 | GET    | `/api/stock/adjustment-reasons` | `stock.view` | Reasons for adjustments |
 | POST   | `/api/stock/transfers` | `stock.transfer` | Move `quantity` of `productId` from `fromWarehouseId` to `toWarehouseId`; `409` if there isn't enough stock |
 | POST   | `/api/stock/adjustments` | `stock.adjust` | Set `productId` in `warehouseId` to `countedQuantity` with a `reason`; `409` if stock no longer equals `expectedQuantity` |
-| GET    | `/api/suppliers`     | `suppliers.view` | Suppliers for pickers |
-| GET    | `/api/customers`     | `customers.view` | Customers for pickers: `search` (code, name, contact), `status=active`, `limit` |
+| GET    | `/api/suppliers`     | `suppliers.view` | List with received POs, spend, open POs and last PO: `offset`, `limit`, `sort`, `dir`, `search`, `status` |
+| GET    | `/api/suppliers/:id` | `suppliers.view` | Contact details and totals (received, spend, average, open POs and value, cancelled, first and last PO) |
+| GET    | `/api/suppliers/:id/purchase-orders` | `suppliers.view` + `purchase_orders.view` | Purchase order history, newest first: `offset`, `limit`, `status` |
+| POST   | `/api/suppliers`     | `suppliers.manage` | Create (same fields as customers); the code is generated |
+| PATCH  | `/api/suppliers/:id` | `suppliers.manage` | Edit any fields, or set `isActive` |
+| DELETE | `/api/suppliers/:id` | `suppliers.manage` | Delete a supplier without purchase orders; one with POs returns `409` (deactivate instead) |
+| GET    | `/api/customers`     | `customers.view` | List with orders, revenue and last order: `offset`, `limit`, `sort`, `dir`, `search` (code, name, contact, phone, email), `city`, `status` |
+| GET    | `/api/customers/cities` | `customers.view` | Cities for the filter |
+| GET    | `/api/customers/:id` | `customers.view` | Contact details and totals (orders, cancelled, revenue, average order, first and last order) |
+| GET    | `/api/customers/:id/orders` | `customers.view` | Order history, newest first: `offset`, `limit`, `status` |
+| POST   | `/api/customers`     | `customers.manage` | Create (`name`, `contactName`, `email`, `phone`, `city`, `address`, `notes`); the code is generated |
+| PATCH  | `/api/customers/:id` | `customers.manage` | Edit any fields, or set `isActive` |
+| DELETE | `/api/customers/:id` | `customers.manage` | Delete a customer without orders; one with orders returns `409` (deactivate instead) |
 | GET    | `/api/purchase-orders` | `purchase_orders.view` | List with `offset`, `limit`, `sort`, `dir`, `status`, `supplierId`, `warehouseId`, `from`, `to`, `search` |
 | GET    | `/api/purchase-orders/:id` | `purchase_orders.view` | One PO with its lines and who created / approved / received / cancelled it |
 | POST   | `/api/purchase-orders` | `purchase_orders.create` | Create a draft: `supplierId`, `warehouseId`, `expectedDate`, `note`, `items: [{ productId, quantity, unitCost }]` |
@@ -382,6 +410,8 @@ The tests run against the database in `server/.env`. Each file creates its own t
 | `auth.test.js` | Sign-ups become Staff; passwords are bcrypt-hashed; login doesn't reveal which emails exist; missing, invalid, expired and forged tokens get `401`; the role comes from the database, not the token; deactivating or changing a role works on the next request; a password change signs out other sessions |
 | `rateLimit.test.js` | Successful logins never count; the 11th failed attempt gets `429` |
 | `permissions.test.js` | Each role has exactly the permissions in the table above, and every route answers `403` exactly when it should; admins can't demote themselves |
+| `customers.test.js` | Generated codes; validation; search; totals leave out cancelled orders; a customer with orders can only be deactivated |
+| `suppliers.test.js` | Spend counts received POs, open POs are separate, cancelled count for neither; delete vs deactivate; a new PO for an inactive supplier is refused; Staff get `403` |
 | `account.test.js` | Profile changes keep emails unique and can't change the role; preferences are per user |
 | `products.test.js` | Validation; optimistic locking (`409` instead of overwriting); `%` and `_` in search are literal and unknown sort columns are ignored; delete rules; all-or-nothing Excel import; export → edit → import |
 | `stock.test.js` | Concurrent transfers of the last units; opposite transfers without deadlock; rollback half-way; no negative stock; stale adjustments refused |
@@ -403,7 +433,7 @@ The tests run against the database in `server/.env`. Each file creates its own t
 
 Progress is tracked on the [project board](https://github.com/users/qhao15/projects/1). Each item links to its issue, which has the full task list.
 
-**[v0.1 Foundation](https://github.com/qhao15/stockflow/milestone/1)**
+**[v0.1 Foundation](https://github.com/qhao15/stockflow/milestone/1)** · released as [v0.1.0](https://github.com/qhao15/stockflow/releases/tag/v0.1.0)
 
 - [x] Project setup, app layout and dashboard shell ([#1](https://github.com/qhao15/stockflow/issues/1))
 - [x] Authentication: register, login, logout with JWT + bcrypt ([#2](https://github.com/qhao15/stockflow/issues/2))
@@ -411,12 +441,12 @@ Progress is tracked on the [project board](https://github.com/users/qhao15/proje
 - [x] Database schema and seed data ([#4](https://github.com/qhao15/stockflow/issues/4))
 - [x] Products and categories, with Excel import ([#5](https://github.com/qhao15/stockflow/issues/5))
 
-**[v0.2 Stock & orders](https://github.com/qhao15/stockflow/milestone/2)**
+**[v0.2 Stock & orders](https://github.com/qhao15/stockflow/milestone/2)** · complete, to be released as v0.2.0
 
 - [x] Warehouses, stock and transfers ([#6](https://github.com/qhao15/stockflow/issues/6))
 - [x] Purchase orders ([#7](https://github.com/qhao15/stockflow/issues/7))
 - [x] Sales orders and PDF invoices ([#8](https://github.com/qhao15/stockflow/issues/8))
-- [ ] Customers and suppliers ([#9](https://github.com/qhao15/stockflow/issues/9))
+- [x] Customers and suppliers ([#9](https://github.com/qhao15/stockflow/issues/9))
 
 **[v0.3 Reports & audit](https://github.com/qhao15/stockflow/milestone/3)**
 

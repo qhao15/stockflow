@@ -102,7 +102,9 @@ erDiagram
         varchar contact_name
         varchar email
         varchar phone
+        varchar city
         varchar address
+        varchar notes
         tinyint is_active
         timestamp created_at
         timestamp updated_at
@@ -149,6 +151,7 @@ erDiagram
         varchar phone
         varchar city
         varchar address
+        varchar notes
         tinyint is_active
         timestamp created_at
         timestamp updated_at

@@ -72,16 +72,16 @@ export default function SalesOrdersPage() {
         </Link>
       ),
     },
-    { colId: 'orderDate', field: 'orderDate', headerName: 'Date', width: 170, minWidth: 170, valueFormatter: ({ value }) => formatDateTime(value) },
     { colId: 'customer', headerName: 'Customer', flex: 1, minWidth: 220, valueGetter: ({ data }) => data?.customer.name },
     { colId: 'warehouse', headerName: 'Warehouse', width: 110, minWidth: 110, cellStyle: center, headerClass: 'header-center', valueGetter: ({ data }) => data?.warehouse.code },
     { colId: 'items', headerName: 'Lines', width: 80, minWidth: 80, sortable: false, cellStyle: center, headerClass: 'header-center', valueGetter: ({ data }) => data?.itemCount },
     { colId: 'totalAmount', field: 'totalAmount', headerName: 'Total', width: 130, minWidth: 130, cellStyle: center, headerClass: 'header-center', valueFormatter: ({ value }) => (value == null ? '' : money.format(value)) },
+    { colId: 'orderDate', field: 'orderDate', headerName: 'Date', width: 155, minWidth: 155, headerClass: 'header-center', valueFormatter: ({ value }) => formatDateTime(value) },
     {
       colId: 'status', field: 'status', headerName: 'Status', width: 120, minWidth: 120, cellStyle: center, headerClass: 'header-center',
       cellRenderer: ({ value }) => value && <StatusChip status={value} />,
     },
-    { colId: 'createdBy', headerName: 'Sold by', width: 120, minWidth: 120, sortable: false, valueGetter: ({ data }) => data?.createdBy?.name },
+    { colId: 'createdBy', headerName: 'Sold by', width: 120, minWidth: 120, cellStyle: center, headerClass: 'header-center', sortable: false, valueGetter: ({ data }) => data?.createdBy?.name },
   ], []);
 
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true }), []);

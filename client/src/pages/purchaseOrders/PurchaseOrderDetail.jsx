@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Alert, Box, Button, Card, CardContent, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
-  Skeleton, Snackbar, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography,
+  Link, Skeleton, Snackbar, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
 import Grid from '@mui/material/Grid2';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -158,7 +158,18 @@ export default function PurchaseOrderDetail() {
             <Card>
               <CardContent>
                 <Grid container spacing={2}>
-                  <Grid size={{ xs: 12, sm: 6 }}><Field label="Supplier">{order.supplier.name}</Field></Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Field label="Supplier">
+                      {order.supplier.name}
+                      <Typography variant="body2">
+                        {can('suppliers.view') ? (
+                          <Link component={RouterLink} to={`/suppliers/${order.supplier.id}`} underline="hover" fontWeight={600} sx={{ fontFamily: 'monospace' }}>
+                            {order.supplier.code}
+                          </Link>
+                        ) : order.supplier.code}
+                      </Typography>
+                    </Field>
+                  </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}><Field label="Deliver to">{order.warehouse.name}</Field></Grid>
                   <Grid size={{ xs: 6, sm: 3 }}><Field label="Order date">{formatDate(order.orderDate)}</Field></Grid>
                   <Grid size={{ xs: 6, sm: 3 }}><Field label="Expected">{formatDate(order.expectedDate)}</Field></Grid>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Alert, Box, Button, Card, CardContent, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
-  Skeleton, Snackbar, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography,
+  Link, Skeleton, Snackbar, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
 import Grid from '@mui/material/Grid2';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -161,7 +161,13 @@ export default function SalesOrderDetail() {
                 <Field label="Customer">
                   {order.customer.name}
                   <Typography variant="body2" color="text.secondary">
-                    {[order.customer.code, order.customer.contactName, order.customer.phone].filter(Boolean).join(' · ')}
+                    {can('customers.view') ? (
+                      <Link component={RouterLink} to={`/customers/${order.customer.id}`} underline="hover" fontWeight={600}
+                        sx={{ fontFamily: 'monospace' }}>
+                        {order.customer.code}
+                      </Link>
+                    ) : order.customer.code}
+                    {[order.customer.contactName, order.customer.phone].filter(Boolean).map((part) => ` · ${part}`).join('')}
                   </Typography>
                 </Field>
                 <Field label="Shipped from">{order.warehouse.name}</Field>
