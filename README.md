@@ -441,7 +441,7 @@ Progress is tracked on the [project board](https://github.com/users/qhao15/proje
 - [x] Database schema and seed data ([#4](https://github.com/qhao15/stockflow/issues/4))
 - [x] Products and categories, with Excel import ([#5](https://github.com/qhao15/stockflow/issues/5))
 
-**[v0.2 Stock & orders](https://github.com/qhao15/stockflow/milestone/2)** · complete, to be released as v0.2.0
+**[v0.2 Stock & orders](https://github.com/qhao15/stockflow/milestone/2)** · released as [v0.2.0](https://github.com/qhao15/stockflow/releases/tag/v0.2.0)
 
 - [x] Warehouses, stock and transfers ([#6](https://github.com/qhao15/stockflow/issues/6))
 - [x] Purchase orders ([#7](https://github.com/qhao15/stockflow/issues/7))
