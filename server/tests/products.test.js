@@ -10,11 +10,15 @@ const sku = (suffix) => `TEST-${tag}-${suffix}`;
 let api;
 let token;
 let categoryId;
-const created = { categories: new Set() };
+let manager;
+const created = { categories: new Set(), warehouses: new Set() };
 
+// Everything a test needs is created here or in the test itself: CI starts with an
+// empty database, so nothing from the demo data can be assumed.
 before(async () => {
   api = await startApi();
-  token = await login(api.call, await createUser(tag, 'manager'));
+  manager = await createUser(tag, 'manager');
+  token = await login(api.call, manager);
   const res = await api.call('POST', '/categories', { token, body: { code: tag, name: `Test ${tag}` } });
   assert.equal(res.status, 201, res.body?.message);
   categoryId = res.body.category.id;
@@ -32,6 +36,7 @@ after(async () => {
       await pool.query('DELETE FROM products WHERE id IN (?)', [ids]);
     }
     if (created.categories.size) await pool.query('DELETE FROM categories WHERE id IN (?)', [[...created.categories]]);
+    if (created.warehouses.size) await pool.query('DELETE FROM warehouses WHERE id IN (?)', [[...created.warehouses]]);
     await cleanupUsers();
   } finally {
     await api?.close();
@@ -94,12 +99,12 @@ test('search treats % and _ literally, and unknown sort columns are ignored safe
 test('delete: a product with history is kept; one without is deleted', async () => {
   const unused = (await create(product({ sku: sku('DEL1') }))).body.product;
   const used = (await create(product({ sku: sku('DEL2') }))).body.product;
-  const [[warehouse]] = await pool.query('SELECT id FROM warehouses ORDER BY id LIMIT 1');
-  const [[anyUser]] = await pool.query('SELECT id FROM users ORDER BY id LIMIT 1');
-  await pool.query('INSERT INTO stock (product_id, warehouse_id, quantity) VALUES (?, ?, 1)', [used.id, warehouse.id]);
+  const [warehouse] = await pool.query("INSERT INTO warehouses (code, name, city) VALUES (?, ?, 'Test')", [`${tag}W`, `Test ${tag}`]);
+  created.warehouses.add(warehouse.insertId);
+  await pool.query('INSERT INTO stock (product_id, warehouse_id, quantity) VALUES (?, ?, 1)', [used.id, warehouse.insertId]);
   await pool.query(
     "INSERT INTO stock_movements (product_id, warehouse_id, type, quantity_change, balance_after, user_id, created_at) VALUES (?, ?, 'adjustment', 1, 1, ?, NOW())",
-    [used.id, warehouse.id, anyUser.id]
+    [used.id, warehouse.insertId, manager.id]
   );
 
   assert.equal((await api.call('GET', `/products/${used.id}`, { token })).body.product.inUse, true, 'the grid disables Delete for it');
