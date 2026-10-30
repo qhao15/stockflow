@@ -1,19 +1,13 @@
 import { pool } from '../db/pool.js';
 import { AppError } from './errors.js';
 import { changeStock } from './stockLedger.js';
+import { cents, escapeLike, fromCents, pad } from './format.js';
 
 // Buying from suppliers: draft -> approved -> received, or cancelled before receiving.
 // Every status change is one guarded UPDATE (... WHERE status = <expected>), so two
 // people clicking at the same moment can't both succeed: the second sees 0 rows changed.
 
 export const PO_STATUSES = ['draft', 'approved', 'received', 'cancelled'];
-
-const pad = (n) => String(n).padStart(6, '0');
-const escapeLike = (text) => text.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-
-// Money in cents, so line totals and the order total add up exactly.
-const cents = (amount) => Math.round(amount * 100);
-const fromCents = (value) => (value / 100).toFixed(2);
 
 const SELECT_ORDERS = `
   SELECT po.id, po.po_number, po.status, po.order_date, po.expected_date, po.total_amount, po.note,

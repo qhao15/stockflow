@@ -1,5 +1,6 @@
 import { pool } from '../db/pool.js';
 import { lowStockCount } from './stock.js';
+import { escapeLike } from './format.js';
 
 // Product rows with their category and stock summary: total across warehouses, and in
 // how many active warehouses the quantity is at or below min_stock (low stock). in_use: the
@@ -58,7 +59,6 @@ export function toProduct(row) {
   };
 }
 
-const escapeLike = (text) => text.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 
 // Builds the WHERE clause from list filters: search (SKU or name), categoryId, brand,
 // status (active | inactive | all) and lowStock.

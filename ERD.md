@@ -179,6 +179,7 @@ erDiagram
         int product_id FK
         int quantity "CHECK > 0"
         decimal unit_price "copied at time of sale"
+        decimal unit_cost "copied at time of sale, for profit"
         decimal line_total
     }
 

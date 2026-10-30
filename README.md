@@ -14,14 +14,14 @@
 
 StockFlow tracks products across multiple warehouses, handles purchase orders from suppliers and sales orders to customers, and keeps every stock change traceable through a movement ledger instead of a single editable number.
 
-> **Status:** in active development. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, and purchase orders are done; sales orders and reports are being built step by step (see [Roadmap](#roadmap)).
+> **Status:** in active development. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, purchase orders, and sales orders with PDF invoices are done; customers and suppliers, reports and the audit log are being built step by step (see [Roadmap](#roadmap)).
 
 ## Tech stack
 
 | Layer    | Technology                                             |
 | -------- | ------------------------------------------------------ |
 | Frontend | React 18, Vite, Material UI (MUI), AG Grid Community, React Router, Axios |
-| Backend  | Node.js, Express, ExcelJS (Excel import/export), Multer (file uploads), express-rate-limit |
+| Backend  | Node.js, Express, ExcelJS (Excel import/export), PDFKit (PDF invoices), Multer (file uploads), express-rate-limit |
 | Database | MySQL 8 / MariaDB 10.4+ (via `mysql2`)                 |
 | Auth     | JSON Web Tokens (`jsonwebtoken`), `bcryptjs` password hashing |
 
@@ -55,10 +55,13 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
   - Draft form with a product search box, quantities, unit costs and live line totals.
   - Detail page with a history timeline and Edit / Approve / Receive / Cancel buttons shown by status and permission.
   - Receiving adds every line to the warehouse's stock in one transaction.
+- **Sales orders and PDF invoices** (see [Sales orders module](#sales-orders-module)):
+  - List with status chips and filters (status, warehouse, date range, order number or customer search).
+  - New-order form with customer and product search, the quantity available in the chosen warehouse on every line, an optional discount and live totals.
+  - Detail page with a Download invoice button (everyone) and Cancel (Managers and Admins), which returns the stock.
 
 ### Planned
 
-- **Sales orders**: creating an order decreases stock, cancelling returns it; PDF invoices
 - **Customers & suppliers**: contact info and order history
 - **Dashboard charts**: revenue by day/month, top-selling products, low-stock list
 - **Audit log**: who changed what and when
@@ -154,6 +157,16 @@ Product brands are real; suppliers, customers and people are fictional. SKUs fol
 - **Tests** ([`server/tests/purchaseOrders.test.js`](server/tests/purchaseOrders.test.js)): two receives of the same PO at the same moment (stock added once), an error on line 2 (line 1 rolled back too), the status rules, an outdated draft edit, and exact totals.
 - **Not included yet:** partial deliveries (receiving 30 of 50 now and the rest later) and updating the product's cost price from the last purchase.
 
+## Sales orders module
+
+- **No overselling.** Creating an order deducts its stock in the same transaction, through the shared `changeStock(...)`, which locks each stock row with `SELECT ... FOR UPDATE` before checking it. If two people sell the last unit at the same moment, one succeeds and the other gets `409` with "Only N × SKU left in <warehouse>" (or "out of stock").
+- **All or nothing.** If any line is short, nothing is deducted and no order is saved.
+- **Consistent lock order.** Lines are deducted in product-id order, the same order receipts and other orders use, so orders with overlapping products wait for each other instead of deadlocking.
+- **Prices come from the server.** The client sends only products and quantities. The unit price (current sale price) and unit cost are copied onto each line, so later price changes never rewrite old invoices, and profit reports can use the cost at the time of sale. An optional order discount can't exceed the subtotal.
+- **Cancelling returns the stock once.** A guarded `UPDATE ... WHERE status = 'completed'` runs first; a second cancel (another tab, a double click) finds it already cancelled and stops. Returned stock is written as `sale_cancel` movements linked to the order.
+- **PDF invoices** are generated on the server with PDFKit (`GET /api/sales-orders/:id/invoice.pdf`): seller header, bill-to and ship-from, lines with SKUs, subtotal, discount, total, page numbers, and a CANCELLED stamp on cancelled orders. Noto Sans is embedded so Vietnamese names print correctly. The seller details can be set with the `COMPANY_*` variables.
+- **Tests** ([`server/tests/salesOrders.test.js`](server/tests/salesOrders.test.js)): two orders for the last unit at the same moment, an order with one short line, exact totals and prices copied onto lines, a double cancel, and invoice generation. Each checks that stock still equals the sum of its movements.
+
 ## Roles and permissions
 
 Routes check **permissions**, not role names. The mapping from role to permissions lives in one file, [`server/src/auth/permissions.js`](server/src/auth/permissions.js), so changing what a role can do is a one-line change. `/api/auth/me` returns the user's permission list, and the client uses it only to decide what to show. Every API request is checked again on the server, so hiding a button is never the only protection.
@@ -193,17 +206,19 @@ stockflow/
 │   ├── public/logo.svg         # Logo / favicon
 │   └── src/
 │       ├── auth/               # AuthContext, login and permission guards, login/register layout
-│       ├── components/         # Layout (sidebar + top bar), Logo, ProductPicker
-│       ├── lib/                # api.js (Axios, token, 401 handling), agGrid.js, flash.js
+│       ├── components/         # Layout (sidebar + top bar), Logo, ProductPicker, CustomerPicker
+│       ├── lib/                # api.js (Axios, token, 401 handling), agGrid.js, flash.js, format.js
 │       ├── pages/              # Login, Register, Dashboard, Account, Users
 │       │   ├── admin/          # Users & Settings page, warehouses tab
 │       │   ├── products/       # Product grid, product/import dialogs, categories tab
 │       │   ├── purchaseOrders/ # PO list, draft form, detail page with status actions
+│       │   ├── salesOrders/    # Order list, new-order form with available stock, detail with invoice download
 │       │   └── stock/          # Stock grid, movement history, transfer/adjust dialogs
 │       ├── navItems.js         # Sidebar / module definitions
 │       └── theme.js            # MUI theme
 ├── server/                     # Node.js + Express API
 │   ├── .env.example            # Environment variable template
+│   ├── assets/fonts/           # Noto Sans (SIL Open Font License) for PDF invoices
 │   ├── scripts/
 │   │   ├── create-user.js      # Create an account with a given role from the CLI
 │   │   ├── seed.js             # Simulate a year of business as demo data
@@ -211,11 +226,12 @@ stockflow/
 │   ├── src/
 │   │   ├── auth/               # permissions.js (role -> permission matrix), middleware.js (JWT + permission checks)
 │   │   ├── db/                 # pool.js (MySQL pool + auto-create database), schema.js (tables, created on startup)
-│   │   ├── routes/             # API routes (health, auth, users, account, categories, products, warehouses, stock, suppliers, purchase orders)
-│   │   ├── services/           # Product, stock and purchase order logic, stock ledger (changeStock, transfers, adjustments), Excel
-│   │   ├── validators/         # common.js (email/password), product.js (shared by the API and the import), stock.js, purchaseOrder.js
-│   │   └── index.js            # App entry point
-│   └── tests/                  # Stock ledger and purchase order tests, incl. concurrency (npm test)
+│   │   ├── routes/             # API routes (health, auth, users, account, categories, products, warehouses, stock, suppliers, customers, purchase and sales orders)
+│   │   ├── services/           # Product, stock and order logic, stock ledger (changeStock, transfers, adjustments), Excel, PDF invoices
+│   │   ├── validators/         # common.js (email/password, cancel reason), product.js (shared by the API and the import), stock.js, orders
+│   │   ├── app.js              # Express app: middleware and routes (tests start their own copy)
+│   │   └── index.js            # Entry point: checks .env, prepares the database, starts the server
+│   └── tests/                  # API and service tests against MySQL, incl. concurrency (npm test)
 ├── ERD.md                      # Entity Relationship Diagram
 ├── SECURITY.md                 # How to report a vulnerability
 └── package.json                # Root scripts (run both apps together)
@@ -262,6 +278,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 | `CLIENT_URL`     | `http://localhost:5173` | Allowed CORS origin                                  |
 | `JWT_SECRET`     | *(required)*            | Secret used to sign login tokens; the server won't start without it |
 | `JWT_EXPIRES_IN` | `1d`                    | How long a login lasts (e.g. `8h`, `7d`)             |
+| `COMPANY_NAME`, `COMPANY_ADDRESS`, `COMPANY_PHONE`, `COMPANY_EMAIL`, `COMPANY_TAX_ID` | fictional | Seller details printed on PDF invoices |
 
 The database and its tables are created automatically the first time the server starts, so no manual SQL is needed.
 
@@ -328,12 +345,13 @@ Passwords must be at least 8 characters. This is also the way to reset a forgott
 | POST   | `/api/warehouses`    | `warehouses.manage` | Create a warehouse (`code`, `name`, `city`, `address`) |
 | PATCH  | `/api/warehouses/:id` | `warehouses.manage` | Edit, or set `isActive`; deactivating a warehouse that still holds stock returns `409` |
 | DELETE | `/api/warehouses/:id` | `warehouses.manage` | Delete a warehouse that was never used; one with history returns `409` |
-| GET    | `/api/stock`         | `stock.view` | Products with their quantity per warehouse: `offset`, `limit`, `sort` (incl. `w<warehouseId>`), `dir`, `search`, `categoryId`, `warehouseId`, `lowStock` |
+| GET    | `/api/stock`         | `stock.view` | Products with their quantity per warehouse: `offset`, `limit`, `sort` (incl. `w<warehouseId>`), `dir`, `search`, `categoryId`, `ids`, `warehouseId`, `lowStock` |
 | GET    | `/api/stock/movements` | `stock.view` | The ledger for `productId` and/or `warehouseId`, newest first, with the order or transfer number |
 | GET    | `/api/stock/adjustment-reasons` | `stock.view` | Reasons for adjustments |
 | POST   | `/api/stock/transfers` | `stock.transfer` | Move `quantity` of `productId` from `fromWarehouseId` to `toWarehouseId`; `409` if there isn't enough stock |
 | POST   | `/api/stock/adjustments` | `stock.adjust` | Set `productId` in `warehouseId` to `countedQuantity` with a `reason`; `409` if stock no longer equals `expectedQuantity` |
 | GET    | `/api/suppliers`     | `suppliers.view` | Suppliers for pickers |
+| GET    | `/api/customers`     | `customers.view` | Customers for pickers: `search` (code, name, contact), `status=active`, `limit` |
 | GET    | `/api/purchase-orders` | `purchase_orders.view` | List with `offset`, `limit`, `sort`, `dir`, `status`, `supplierId`, `warehouseId`, `from`, `to`, `search` |
 | GET    | `/api/purchase-orders/:id` | `purchase_orders.view` | One PO with its lines and who created / approved / received / cancelled it |
 | POST   | `/api/purchase-orders` | `purchase_orders.create` | Create a draft: `supplierId`, `warehouseId`, `expectedDate`, `note`, `items: [{ productId, quantity, unitCost }]` |
@@ -341,10 +359,34 @@ Passwords must be at least 8 characters. This is also the way to reset a forgott
 | POST   | `/api/purchase-orders/:id/approve` | `purchase_orders.approve` | Draft → approved |
 | POST   | `/api/purchase-orders/:id/receive` | `purchase_orders.receive` | Approved → received; adds every line to the warehouse's stock in one transaction |
 | POST   | `/api/purchase-orders/:id/cancel` | `purchase_orders.cancel` | Draft or approved → cancelled, with a required `reason` |
+| GET    | `/api/sales-orders`  | `sales_orders.view` | List with `offset`, `limit`, `sort`, `dir`, `status`, `customerId`, `warehouseId`, `from`, `to`, `search` |
+| GET    | `/api/sales-orders/:id` | `sales_orders.view` | One order with its lines |
+| GET    | `/api/sales-orders/:id/invoice.pdf` | `sales_orders.view` | The PDF invoice |
+| POST   | `/api/sales-orders`  | `sales_orders.create` | Create and complete an order: `customerId`, `warehouseId`, `discount`, `note`, `items: [{ productId, quantity }]`; deducts stock, `409` if any line is short |
+| POST   | `/api/sales-orders/:id/cancel` | `sales_orders.cancel` | Cancel with a required `reason`; returns the stock |
 
 Missing or expired token → `401`; valid token without the permission → `403`.
 
 Logging out is handled on the client by discarding the token.
+
+## Tests
+
+```bash
+npm test --prefix server
+```
+
+The tests run against the database in `server/.env`. Each file creates its own temporary users, products, warehouses and so on, with unique codes, and deletes them afterwards, so existing data is left alone. HTTP tests start the API on a free port, so they don't clash with a running dev server.
+
+| File | What it proves |
+| ---- | -------------- |
+| `auth.test.js` | Sign-ups become Staff; passwords are bcrypt-hashed; login doesn't reveal which emails exist; missing, invalid, expired and forged tokens get `401`; the role comes from the database, not the token; deactivating or changing a role works on the next request; a password change signs out other sessions |
+| `rateLimit.test.js` | Successful logins never count; the 11th failed attempt gets `429` |
+| `permissions.test.js` | Each role has exactly the permissions in the table above, and every route answers `403` exactly when it should; admins can't demote themselves |
+| `account.test.js` | Profile changes keep emails unique and can't change the role; preferences are per user |
+| `products.test.js` | Validation; optimistic locking (`409` instead of overwriting); `%` and `_` in search are literal and unknown sort columns are ignored; delete rules; all-or-nothing Excel import; export → edit → import |
+| `stock.test.js` | Concurrent transfers of the last units; opposite transfers without deadlock; rollback half-way; no negative stock; stale adjustments refused |
+| `purchaseOrders.test.js` | Receiving twice at once adds stock once; an error on any line rolls back the receipt; status rules; stale draft edits refused |
+| `salesOrders.test.js` | The last unit can't be sold twice; a short line deducts nothing; prices copied onto lines; a double cancel returns stock once; invoice PDF |
 
 ## Development workflow
 
@@ -352,7 +394,7 @@ Logging out is handled on the client by discarding the token.
 - **Branches and pull requests:** `main` is protected. Work happens on a branch (e.g. `feature/sales-orders`) and is merged through a pull request; `Closes #N` in the PR closes the issue and moves its card to Done.
 - **CI ([GitHub Actions](.github/workflows/ci.yml)):** every push and pull request runs two checks, and both must pass before merging:
   - **Client build:** installs the client with `npm ci` and builds it.
-  - **Server checks:** syntax-checks every server file, runs the stock and purchase order tests (including concurrent transfers and receipts) against MySQL, then starts the API against a fresh MySQL 8 database and checks that `/api/health` reports it connected, which also proves the schema can be created from scratch.
+  - **Server checks:** syntax-checks every server file, runs the stock, purchase and sales order tests (including concurrent transfers, receipts and sales of the last unit) against MySQL, then starts the API against a fresh MySQL 8 database and checks that `/api/health` reports it connected, which also proves the schema can be created from scratch.
 - **Dependencies:** [Dependabot](.github/dependabot.yml) opens monthly PRs with minor and patch updates, grouped so packages that must match (React, MUI, AG Grid, Vite) move together. Major versions are upgraded by hand on a branch, with testing. Security fixes arrive as soon as a vulnerability is published.
 - **Security:** CodeQL scans the code on every push, and secret scanning with push protection blocks commits that contain credentials. See [SECURITY.md](SECURITY.md) to report a vulnerability.
 - **Releases:** each finished milestone is tagged as a [release](https://github.com/qhao15/stockflow/releases) using semantic versioning (`v0.1.0`, `v0.2.0`, …), with notes on what it includes.
@@ -373,7 +415,7 @@ Progress is tracked on the [project board](https://github.com/users/qhao15/proje
 
 - [x] Warehouses, stock and transfers ([#6](https://github.com/qhao15/stockflow/issues/6))
 - [x] Purchase orders ([#7](https://github.com/qhao15/stockflow/issues/7))
-- [ ] Sales orders and PDF invoices ([#8](https://github.com/qhao15/stockflow/issues/8))
+- [x] Sales orders and PDF invoices ([#8](https://github.com/qhao15/stockflow/issues/8))
 - [ ] Customers and suppliers ([#9](https://github.com/qhao15/stockflow/issues/9))
 
 **[v0.3 Reports & audit](https://github.com/qhao15/stockflow/milestone/3)**

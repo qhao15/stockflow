@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { AgGridReact } from 'ag-grid-react';
 import {
-  Alert, Box, Button, InputAdornment, MenuItem, Snackbar, TextField, Typography,
+  Alert, Box, Button, InputAdornment, Link, MenuItem, Snackbar, TextField, Typography,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import api, { errorMessage } from '../../lib/api';
 import { useAuth } from '../../auth/AuthContext';
 import { gridTheme, money } from '../../lib/agGrid';
-import { PO_STATUSES, StatusChip, formatDate } from './status';
+import { PO_STATUSES, StatusChip } from './status';
+import { formatDate } from '../../lib/format';
 
 const PAGE_SIZE = 50;
 const center = { textAlign: 'center', justifyContent: 'center' };
@@ -61,7 +62,16 @@ export default function PurchaseOrdersPage() {
   );
 
   const columnDefs = useMemo(() => [
-    { colId: 'poNumber', field: 'poNumber', headerName: 'PO number', width: 130, minWidth: 130, pinned: 'left', cellStyle: { fontFamily: 'monospace', fontSize: 12 } },
+    {
+      // A real link, so it can also be opened in a new tab (Ctrl+click, middle click).
+      colId: 'poNumber', field: 'poNumber', headerName: 'PO number', width: 130, minWidth: 130, pinned: 'left',
+      cellStyle: { fontFamily: 'monospace', fontSize: 12 },
+      cellRenderer: ({ data }) => data && (
+        <Link component={RouterLink} to={`/purchase-orders/${data.id}`} underline="hover" fontWeight={600} sx={{ fontFamily: 'inherit' }}>
+          {data.poNumber}
+        </Link>
+      ),
+    },
     { colId: 'orderDate', field: 'orderDate', headerName: 'Order date', width: 120, minWidth: 120, valueFormatter: ({ value }) => formatDate(value) },
     { colId: 'supplier', headerName: 'Supplier', flex: 1, minWidth: 200, valueGetter: ({ data }) => data?.supplier.name },
     { colId: 'warehouse', headerName: 'Warehouse', width: 110, minWidth: 110, cellStyle: center, headerClass: 'header-center', valueGetter: ({ data }) => data?.warehouse.code },
@@ -70,7 +80,7 @@ export default function PurchaseOrdersPage() {
     { colId: 'totalAmount', field: 'totalAmount', headerName: 'Total', width: 130, minWidth: 130, cellStyle: center, headerClass: 'header-center', valueFormatter: ({ value }) => (value == null ? '' : money.format(value)) },
     { colId: 'expectedDate', field: 'expectedDate', headerName: 'Expected', width: 100, minWidth: 100, valueFormatter: ({ value }) => formatDate(value) },
     {
-      colId: 'status', field: 'status', headerName: 'Status', width: 120, minWidth: 120, cellStyle: { display: 'flex', alignItems: 'center' },
+      colId: 'status', field: 'status', headerName: 'Status', width: 110, minWidth: 110, cellStyle: center, headerClass: 'header-center',
       cellRenderer: ({ value }) => value && <StatusChip status={value} />,
     },
     { colId: 'createdBy', headerName: 'Created by', width: 120, minWidth: 120, sortable: false, valueGetter: ({ data }) => data?.createdBy?.name },
@@ -114,7 +124,7 @@ export default function PurchaseOrdersPage() {
       </Box>
 
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-        {total === null ? ' ' : `${total.toLocaleString()} purchase order${total === 1 ? '' : 's'} · Click a row to open it`}
+        {total === null ? ' ' : `${total.toLocaleString()} purchase order${total === 1 ? '' : 's'} · Click the PO number to open it`}
       </Typography>
 
       <Box
@@ -122,7 +132,6 @@ export default function PurchaseOrdersPage() {
           height: 'calc(100vh - 300px)',
           minHeight: 420,
           '& .header-center .ag-header-cell-label': { justifyContent: 'center' },
-          '& .ag-row': { cursor: 'pointer' },
         }}
       >
         <AgGridReact
@@ -137,7 +146,6 @@ export default function PurchaseOrdersPage() {
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
           getRowId={(p) => String(p.data.id)}
-          onRowClicked={({ data }) => data && navigate(`/purchase-orders/${data.id}`)}
           overlayNoRowsTemplate="No purchase orders match these filters"
         />
       </Box>
