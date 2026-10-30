@@ -7,7 +7,8 @@ import {
   approvePurchaseOrder, cancelPurchaseOrder, createPurchaseOrder, getPurchaseOrder, listPurchaseOrders,
   receivePurchaseOrder, updatePurchaseOrder,
 } from '../services/purchaseOrders.js';
-import { validateCancel, validatePurchaseOrder } from '../validators/purchaseOrder.js';
+import { validatePurchaseOrder } from '../validators/purchaseOrder.js';
+import { validateCancel } from '../validators/common.js';
 
 const router = Router();
 

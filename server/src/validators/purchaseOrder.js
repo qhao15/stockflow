@@ -58,10 +58,3 @@ export function validatePurchaseOrder(body) {
 
   return { values: { supplierId, warehouseId, expectedDate, note: note || null, items } };
 }
-
-export function validateCancel(body) {
-  const reason = String(body.reason ?? '').trim();
-  if (!reason) return { error: 'Give a reason for cancelling' };
-  if (reason.length > 255) return { error: 'Reason can be at most 255 characters' };
-  return { values: { reason } };
-}

@@ -1,4 +1,5 @@
 import { AppError } from './errors.js';
+import { pad } from './format.js';
 
 // The only code that changes stock. Every change locks the stock row, updates the
 // quantity and writes its stock_movements row in the caller's transaction, so `stock`
@@ -15,8 +16,6 @@ export const ADJUSTMENT_REASONS = {
 
 // Stock-specific failures (not enough stock, inactive warehouse...).
 export class StockError extends AppError {}
-
-const pad = (n) => String(n).padStart(6, '0');
 
 // Locks the stock rows of one product in the given warehouses, creating missing rows
 // with quantity 0. Rows are always locked in ascending warehouse order, so two

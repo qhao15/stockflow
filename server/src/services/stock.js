@@ -1,6 +1,5 @@
 import { pool } from '../db/pool.js';
-
-const escapeLike = (text) => text.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+import { escapeLike } from './format.js';
 
 // Low stock: at or below the product's min_stock in an active warehouse. A warehouse
 // without a stock row counts as 0. Shared with the products list so both pages agree.
@@ -24,7 +23,7 @@ const parseId = (value) => {
 };
 
 // GET /api/stock: one row per product with its quantity in every warehouse.
-// Filters: search (SKU or name), categoryId, status, lowStock (optionally in warehouseId).
+// Filters: search (SKU or name), categoryId, ids, status, lowStock (optionally in warehouseId).
 // Sort: a SORTS key, or w<warehouseId> to sort by the quantity in one warehouse.
 export async function listStock(query, { offset = 0, limit = 50 } = {}) {
   const where = [];
@@ -38,6 +37,12 @@ export async function listStock(query, { offset = 0, limit = 50 } = {}) {
   if (categoryId) {
     where.push('p.category_id = ?');
     params.push(categoryId);
+  }
+  // ids=1,2,3: just these products (e.g. the lines of an order being entered).
+  const productIds = String(query.ids ?? '').split(',').map(parseId).filter(Boolean).slice(0, 500);
+  if (productIds.length) {
+    where.push('p.id IN (?)');
+    params.push(productIds);
   }
   if (query.status === 'active') where.push('p.is_active = 1');
   else if (query.status === 'inactive') where.push('p.is_active = 0');

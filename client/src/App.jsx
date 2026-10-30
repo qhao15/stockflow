@@ -18,6 +18,9 @@ const StockPage = lazy(() => import('./pages/stock/StockPage'));
 const PurchaseOrdersPage = lazy(() => import('./pages/purchaseOrders/PurchaseOrdersPage'));
 const PurchaseOrderForm = lazy(() => import('./pages/purchaseOrders/PurchaseOrderForm'));
 const PurchaseOrderDetail = lazy(() => import('./pages/purchaseOrders/PurchaseOrderDetail'));
+const SalesOrdersPage = lazy(() => import('./pages/salesOrders/SalesOrdersPage'));
+const SalesOrderForm = lazy(() => import('./pages/salesOrders/SalesOrderForm'));
+const SalesOrderDetail = lazy(() => import('./pages/salesOrders/SalesOrderDetail'));
 
 // Modules that have a real page; the rest show "Coming soon" for now.
 const pages = {
@@ -25,6 +28,7 @@ const pages = {
   '/products': ProductsPage,
   '/stock': StockPage,
   '/purchase-orders': PurchaseOrdersPage,
+  '/sales-orders': SalesOrdersPage,
 };
 
 // Pages below a module (detail, form), each with the permission it needs.
@@ -32,6 +36,8 @@ const subPages = [
   { path: '/purchase-orders/new', Page: PurchaseOrderForm, permission: 'purchase_orders.create' },
   { path: '/purchase-orders/:id', Page: PurchaseOrderDetail, permission: 'purchase_orders.view' },
   { path: '/purchase-orders/:id/edit', Page: PurchaseOrderForm, permission: 'purchase_orders.create' },
+  { path: '/sales-orders/new', Page: SalesOrderForm, permission: 'sales_orders.create' },
+  { path: '/sales-orders/:id', Page: SalesOrderDetail, permission: 'sales_orders.view' },
 ];
 
 const guarded = (permission, element) => (

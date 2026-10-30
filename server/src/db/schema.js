@@ -191,6 +191,7 @@ const tables = [
     product_id INT UNSIGNED NOT NULL,
     quantity INT UNSIGNED NOT NULL,
     unit_price DECIMAL(12, 2) NOT NULL,
+    unit_cost DECIMAL(12, 2) NOT NULL DEFAULT 0,
     line_total DECIMAL(14, 2) NOT NULL,
     UNIQUE KEY uq_so_item (sales_order_id, product_id),
     CONSTRAINT fk_so_items_order FOREIGN KEY (sales_order_id) REFERENCES sales_orders (id) ON DELETE CASCADE,
@@ -262,7 +263,16 @@ const addedColumns = [
   ['purchase_orders', 'cancelled_at', 'DATETIME NULL AFTER cancelled_by'],
   ['purchase_orders', 'cancel_reason', 'VARCHAR(255) NULL AFTER cancelled_at'],
   ['purchase_orders', 'version', 'INT UNSIGNED NOT NULL DEFAULT 0 AFTER cancel_reason'],
+  // Cost at the time of sale, for profit reports. Existing rows are filled from the
+  // product's cost price once, when the column is added (see backfills below).
+  ['sales_order_items', 'unit_cost', 'DECIMAL(12, 2) NOT NULL DEFAULT 0 AFTER unit_price'],
 ];
+
+// Runs once, right after its column is added.
+const backfills = {
+  'sales_order_items.unit_cost': `UPDATE sales_order_items i JOIN products p ON p.id = i.product_id
+                                  SET i.unit_cost = p.cost_price`,
+};
 
 // Foreign keys for columns added above (new databases get them from CREATE TABLE).
 const addedForeignKeys = [
@@ -278,7 +288,11 @@ export async function ensureSchema() {
       'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
       [table, column]
     );
-    if (rows.length === 0) await pool.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    if (rows.length === 0) {
+      await pool.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+      const backfill = backfills[`${table}.${column}`];
+      if (backfill) await pool.query(backfill);
+    }
   }
   for (const [table, name, definition] of addedForeignKeys) {
     const [rows] = await pool.query(

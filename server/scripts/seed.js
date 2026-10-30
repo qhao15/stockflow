@@ -335,7 +335,7 @@ function simulate({ warehouses, products, customers }, users) {
         const price = products[p].salePrice;
         const lineTotal = round2(price * qty);
         subtotal += lineTotal;
-        salesItems.push([++salesItemId, id, p + 1, qty, price, lineTotal]);
+        salesItems.push([++salesItemId, id, p + 1, qty, price, products[p].costPrice, lineTotal]);
         move(p, w, 'sale', -qty, 'sales_order', id, createdBy, orderDate);
         touched.add(key(p, w));
       }
@@ -498,7 +498,7 @@ async function write(data, sim) {
         so.total, so.createdBy, so.cancelledBy, so.cancelledAt, so.cancelReason, so.orderDate,
       ]));
     await insert(conn, 'sales_order_items',
-      ['id', 'sales_order_id', 'product_id', 'quantity', 'unit_price', 'line_total'], sim.salesItems);
+      ['id', 'sales_order_id', 'product_id', 'quantity', 'unit_price', 'unit_cost', 'line_total'], sim.salesItems);
     await insert(conn, 'stock_transfers',
       ['id', 'transfer_number', 'product_id', 'from_warehouse_id', 'to_warehouse_id', 'quantity', 'note', 'created_by', 'created_at'],
       sim.transfers);
