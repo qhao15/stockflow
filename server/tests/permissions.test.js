@@ -51,6 +51,7 @@ const ROUTES = [
   ['suppliers.view', 'GET', '/suppliers'],
   ['suppliers.manage', 'POST', '/suppliers', {}],
   ['users.manage', 'GET', '/users'],
+  ['audit_log.view', 'GET', '/audit-logs?limit=1'],
 ];
 
 const tag = newTag('P');

@@ -7,6 +7,7 @@ import { cancelSalesOrder, createSalesOrder, getSalesOrder, listSalesOrders } fr
 import { buildInvoicePdf } from '../services/invoicePdf.js';
 import { validateSalesOrder } from '../validators/salesOrder.js';
 import { validateCancel } from '../validators/common.js';
+import { audit, auditContext } from '../services/audit.js';
 
 const router = Router();
 const canView = requirePermission('sales_orders.view');
@@ -63,7 +64,18 @@ router.post('/', requirePermission('sales_orders.create'), async (req, res, next
   const { values, error } = validateSalesOrder(req.body);
   if (error) return res.status(400).json({ message: error });
   try {
-    const salesOrder = await withTransaction((conn) => createSalesOrder(conn, values, req.user.id));
+    const salesOrder = await withTransaction(async (conn) => {
+      const order = await createSalesOrder(conn, values, req.user.id);
+      await audit(conn, auditContext(req), {
+        action: 'create', entity: 'sales_order', entityId: order.id, label: order.orderNumber,
+        after: {
+          customer: order.customer.name, warehouse: order.warehouse.code, subtotal: order.subtotal, discount: order.discount,
+          total: order.totalAmount, note: order.note,
+          lines: order.items.map((i) => `${i.sku} × ${i.quantity} @ ${i.unitPrice}`).join('; '),
+        },
+      });
+      return order;
+    });
     res.status(201).json({ salesOrder });
   } catch (err) {
     sendAppError(res, err, next);
@@ -77,7 +89,14 @@ router.post('/:id/cancel', requirePermission('sales_orders.cancel'), async (req,
   const { values, error } = validateCancel(req.body);
   if (error) return res.status(400).json({ message: error });
   try {
-    const salesOrder = await withTransaction((conn) => cancelSalesOrder(conn, id, values.reason, req.user.id));
+    const salesOrder = await withTransaction(async (conn) => {
+      const order = await cancelSalesOrder(conn, id, values.reason, req.user.id);
+      await audit(conn, auditContext(req), {
+        action: 'cancel', entity: 'sales_order', entityId: order.id, label: order.orderNumber,
+        changes: { status: ['completed', 'cancelled'], reason: values.reason, unitsReturned: order.unitCount },
+      });
+      return order;
+    });
     res.json({ salesOrder });
   } catch (err) {
     sendAppError(res, err, next);

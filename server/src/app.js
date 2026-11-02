@@ -14,6 +14,7 @@ import suppliersRouter from './routes/suppliers.js';
 import purchaseOrdersRouter from './routes/purchaseOrders.js';
 import customersRouter from './routes/customers.js';
 import salesOrdersRouter from './routes/salesOrders.js';
+import auditLogsRouter from './routes/auditLogs.js';
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.use('/api/suppliers', suppliersRouter);
 app.use('/api/purchase-orders', purchaseOrdersRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/sales-orders', salesOrdersRouter);
+app.use('/api/audit-logs', auditLogsRouter);
 
 app.use((req, res) => res.status(404).json({ message: 'Not found' }));
 

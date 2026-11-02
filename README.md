@@ -14,7 +14,7 @@
 
 StockFlow tracks products across multiple warehouses, handles purchase orders from suppliers and sales orders to customers, and keeps every stock change traceable through a movement ledger instead of a single editable number.
 
-> **Status:** in active development, version **0.2.0**. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, purchase orders, sales orders with PDF invoices, and customers and suppliers are done; reports and the audit log are being built step by step (see [Roadmap](#roadmap)).
+> **Status:** in active development, version **0.2.0**. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, purchase orders, sales orders with PDF invoices, customers and suppliers, and the audit log are done; dashboard charts and reports are being built step by step (see [Roadmap](#roadmap)).
 
 ## Tech stack
 
@@ -30,7 +30,7 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
 ### Available now
 
 - **Accounts**: register, sign in and log out. Every page except Login and Register requires an account.
-- **Session handling**: the session is restored on page reload, and an expired token automatically logs the user out and returns them to the page they were on after signing in again. Signing in or out in one tab refreshes all other open tabs.
+- **Session handling**: the session is restored on page reload, and an expired token automatically logs the user out and returns them to the page they were on after signing in again. If the server can't be reached, for example while it restarts, the app keeps the login and tries again instead of logging out. Signing in or out in one tab refreshes all other open tabs.
 - **Roles**: Admin, Manager and Staff. The first registered account becomes Admin, later sign-ups become Staff. Accounts with any role can also be created from the command line (see [Creating accounts](#creating-accounts)).
 - **Role-based access**: each module and action requires a permission (see [Roles and permissions](#roles-and-permissions)). The API refuses requests without it, and the sidebar, dashboard and routes only show what the user's role allows.
 - **User management** (Admin): list users, change roles, deactivate and reactivate accounts. Changes take effect on the user's next request.
@@ -63,6 +63,10 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
   - List with search (name, code, contact, phone, email), city and status filters, and orders, revenue and last order per customer, sortable to find the best customers.
   - Detail page with contact details, totals (orders, revenue, average order, last order) and the order history.
   - Add and edit, deactivate a customer with orders (delete only one without), and "+ New customer" right inside the sales order form.
+- **Audit log** (Admin, see [Audit log module](#audit-log-module)):
+  - Every change in the app, with who made it, when, from which IP, and the values before and after.
+  - Audit Log page with filters (record, type, action, user, dates) and rows that expand to a before → after table.
+  - A History section on purchase order, sales order, customer and supplier pages, and a History button per product.
 - **Suppliers** (Managers and Admins):
   - List with received POs, spend, open POs and last PO per supplier.
   - Detail page with contact details, totals (spend, average PO, open POs and their value) and the purchase order history, plus "New purchase order" with the supplier already picked.
@@ -71,7 +75,6 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
 ### Planned
 
 - **Dashboard charts**: revenue by day/month, top-selling products, low-stock list
-- **Audit log**: who changed what and when
 
 ### Stock traceability
 
@@ -182,6 +185,16 @@ Product brands are real; suppliers, customers and people are fictional. SKUs fol
 - **Quick add while selling.** The customer search in the sales order form has "+ New customer"; the new customer is selected straight away. Staff can do this, because they take the orders.
 - **Shared validation** for customers and suppliers ([`server/src/validators/contact.js`](server/src/validators/contact.js)): name required, email optional but valid and stored lowercase, phone digits with `+ - ( )` and spaces.
 
+## Audit log module
+
+- **Same transaction as the change.** `audit(conn, ctx, {...})` in [`server/src/services/audit.js`](server/src/services/audit.js) writes on the connection of the change it records. A change that rolls back (an error half-way, an outdated edit, an order for stock that isn't there) leaves no audit row; a committed change always has one. Routes that used to write with a single query now run in a transaction for this.
+- **Only what changed.** Updates store `{ "salePrice": [15.5, 18] }` for the changed fields only, worked out from the record before and after. A new record is `[null, value]`, a deleted one `[value, null]`. Bookkeeping fields (`version`, `updatedAt`, totals) are left out, and an edit that changes nothing writes nothing.
+- **Never a secret.** Fields named like password, hash, token or secret are dropped whatever the caller passes; a password change is logged only as "password changed".
+- **What is logged:** products (create, edit, delete, Excel import as one row with the SKUs), categories, warehouses, stock transfers and adjustments, purchase orders (create, edit, approve, receive, cancel), sales orders (create, cancel), customers, suppliers, user roles and active status, and changes to your own account.
+- **Readable later.** Each row keeps the record's label at the time (SKU, PO number, name), so the log still makes sense after a record is renamed or deleted.
+- **Admin only**, both the Audit Log page and the History sections. The demo data is loaded directly by the seed, so the log starts empty and fills as the app is used.
+- **Tests** ([`server/tests/audit.test.js`](server/tests/audit.test.js)): one row per committed change with only the changed fields; no row for a rolled-back change, an outdated edit or an oversold order; no password or hash ever stored; orders, stock moves and role changes logged with their details; filters; non-admins get `403`.
+
 ## Roles and permissions
 
 Routes check **permissions**, not role names. The mapping from role to permissions lives in one file, [`server/src/auth/permissions.js`](server/src/auth/permissions.js), so changing what a role can do is a one-line change. `/api/auth/me` returns the user's permission list, and the client uses it only to decide what to show. Every API request is checked again on the server, so hiding a button is never the only protection.
@@ -221,10 +234,11 @@ stockflow/
 │   ├── public/logo.svg         # Logo / favicon
 │   └── src/
 │       ├── auth/               # AuthContext, login and permission guards, login/register layout
-│       ├── components/         # Layout, Logo, ProductPicker, CustomerPicker, ContactDialog, DetailParts
+│       ├── components/         # Layout, Logo, pickers, ContactDialog, DetailParts, AuditHistory / AuditChanges
 │       ├── lib/                # api.js (Axios, token, 401 handling), agGrid.js, flash.js, format.js
 │       ├── pages/              # Login, Register, Dashboard, Account, Users
 │       │   ├── admin/          # Users & Settings page, warehouses tab
+│       │   ├── auditLog/       # Audit Log page with filters and before/after rows
 │       │   ├── customers/      # Customer list and detail page with totals and order history
 │       │   ├── suppliers/      # Supplier list and detail page with spend, open POs and PO history
 │       │   ├── products/       # Product grid, product/import dialogs, categories tab
@@ -243,14 +257,15 @@ stockflow/
 │   ├── src/
 │   │   ├── auth/               # permissions.js (role -> permission matrix), middleware.js (JWT + permission checks)
 │   │   ├── db/                 # pool.js (MySQL pool + auto-create database), schema.js (tables, created on startup)
-│   │   ├── routes/             # API routes (health, auth, users, account, categories, products, warehouses, stock, suppliers, customers, purchase and sales orders)
-│   │   ├── services/           # Product, stock and order logic, stock ledger (changeStock, transfers, adjustments), Excel, PDF invoices
+│   │   ├── routes/             # API routes (health, auth, users, account, categories, products, warehouses, stock, suppliers, customers, purchase and sales orders, audit logs)
+│   │   ├── services/           # Product, stock and order logic, stock ledger (changeStock, transfers, adjustments), audit log, Excel, PDF invoices
 │   │   ├── validators/         # common.js (email/password, cancel reason), product.js (shared by the API and the import), stock.js, orders, contact.js
 │   │   ├── app.js              # Express app: middleware and routes (tests start their own copy)
 │   │   └── index.js            # Entry point: checks .env, prepares the database, starts the server
 │   └── tests/                  # API and service tests against MySQL, incl. concurrency (npm test)
 ├── ERD.md                      # Entity Relationship Diagram
 ├── SECURITY.md                 # How to report a vulnerability
+├── scripts/wait-for-api.js     # Lets `npm run dev` start the frontend once the API is up
 └── package.json                # Root scripts (run both apps together)
 ```
 
@@ -305,7 +320,7 @@ The database and its tables are created automatically the first time the server 
 npm run dev
 ```
 
-This starts both apps:
+This starts both apps (the frontend waits until the API accepts connections):
 
 - Frontend: http://localhost:5173
 - API: http://localhost:5000
@@ -392,6 +407,8 @@ Passwords must be at least 8 characters. This is also the way to reset a forgott
 | GET    | `/api/sales-orders/:id/invoice.pdf` | `sales_orders.view` | The PDF invoice |
 | POST   | `/api/sales-orders`  | `sales_orders.create` | Create and complete an order: `customerId`, `warehouseId`, `discount`, `note`, `items: [{ productId, quantity }]`; deducts stock, `409` if any line is short |
 | POST   | `/api/sales-orders/:id/cancel` | `sales_orders.cancel` | Cancel with a required `reason`; returns the stock |
+| GET    | `/api/audit-logs`    | `audit_log.view` | Newest first: `offset`, `limit`, `userId`, `entity`, `entityId` (one record's history), `action`, `from`, `to`, `search` (record label) |
+| GET    | `/api/audit-logs/options` | `audit_log.view` | Record types, actions and users for the filters |
 
 Missing or expired token → `401`; valid token without the permission → `403`.
 
@@ -411,6 +428,7 @@ The tests run against the database in `server/.env`. Each file creates its own t
 | `rateLimit.test.js` | Successful logins never count; the 11th failed attempt gets `429` |
 | `permissions.test.js` | Each role has exactly the permissions in the table above, and every route answers `403` exactly when it should; admins can't demote themselves |
 | `customers.test.js` | Generated codes; validation; search; totals leave out cancelled orders; a customer with orders can only be deactivated |
+| `audit.test.js` | One audit row per committed change, with only the changed fields; none for a rolled-back change; no password or hash ever stored; orders, stock moves and role changes logged with details; filters; Admin only |
 | `suppliers.test.js` | Spend counts received POs, open POs are separate, cancelled count for neither; delete vs deactivate; a new PO for an inactive supplier is refused; Staff get `403` |
 | `account.test.js` | Profile changes keep emails unique and can't change the role; preferences are per user |
 | `products.test.js` | Validation; optimistic locking (`409` instead of overwriting); `%` and `_` in search are literal and unknown sort columns are ignored; delete rules; all-or-nothing Excel import; export → edit → import |
@@ -451,4 +469,4 @@ Progress is tracked on the [project board](https://github.com/users/qhao15/proje
 **[v0.3 Reports & audit](https://github.com/qhao15/stockflow/milestone/3)**
 
 - [ ] Dashboard charts and reports ([#10](https://github.com/qhao15/stockflow/issues/10))
-- [ ] Audit log ([#11](https://github.com/qhao15/stockflow/issues/11))
+- [x] Audit log ([#11](https://github.com/qhao15/stockflow/issues/11))

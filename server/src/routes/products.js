@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { pool } from '../db/pool.js';
+import { pool, withTransaction } from '../db/pool.js';
 import { requireAuth, requirePermission } from '../auth/middleware.js';
 import { PRODUCT_COLUMNS, UNITS, firstError, validateProduct } from '../validators/product.js';
 import { categoryExists, getProduct, listProducts } from '../services/products.js';
 import { XLSX_TYPE, buildExport, buildTemplate, columnHeader, readProductFile } from '../services/productExcel.js';
+import { audit, auditContext } from '../services/audit.js';
 import { apiLimiter } from '../auth/rateLimit.js';
 
 const router = Router();
@@ -140,19 +141,33 @@ async function importProducts(req, res) {
   const conn = await pool.getConnection();
   let created = 0;
   let updated = 0;
+  const skus = { created: [], updated: [] };
   try {
     await conn.beginTransaction();
     for (let i = 0; i < products.length; i += 1000) {
       const chunk = products.slice(i, i + 1000);
       const [existing] = await conn.query('SELECT sku FROM products WHERE sku IN (?)', [chunk.map((p) => p.sku)]);
+      const existingSkus = new Set(existing.map((e) => e.sku));
       updated += existing.length;
       created += chunk.length - existing.length;
+      for (const p of chunk) skus[existingSkus.has(p.sku) ? 'updated' : 'created'].push(p.sku);
       await conn.query(
         `INSERT INTO products (${columns.join(', ')}) VALUES ?
          ON DUPLICATE KEY UPDATE ${updates}, version = version + 1`,
         [chunk.map((p) => fields.map((f) => p[f]))]
       );
     }
+    // One row for the whole import (not one per product), with the SKUs (first 100 of each).
+    await audit(conn, auditContext(req), {
+      action: 'import',
+      entity: 'product',
+      label: req.file.originalname,
+      changes: {
+        created, updated,
+        createdSkus: skus.created.slice(0, 100).join(', ') || null,
+        updatedSkus: skus.updated.slice(0, 100).join(', ') || null,
+      },
+    });
     await conn.commit();
   } catch (err) {
     await conn.rollback();
@@ -184,11 +199,16 @@ router.post('/', canManage, async (req, res, next) => {
   try {
     if (!(await categoryExists(values.categoryId))) return res.status(400).json({ message: 'Category not found' });
     const fields = Object.keys(values);
-    const [result] = await pool.query(
-      `INSERT INTO products (${fields.map((f) => PRODUCT_COLUMNS[f]).join(', ')}) VALUES (?)`,
-      [fields.map((f) => values[f])]
-    );
-    res.status(201).json({ product: await getProduct(result.insertId) });
+    const product = await withTransaction(async (conn) => {
+      const [result] = await conn.query(
+        `INSERT INTO products (${fields.map((f) => PRODUCT_COLUMNS[f]).join(', ')}) VALUES (?)`,
+        [fields.map((f) => values[f])]
+      );
+      const saved = await getProduct(result.insertId, conn);
+      await audit(conn, auditContext(req), { action: 'create', entity: 'product', entityId: saved.id, label: saved.sku, after: saved });
+      return saved;
+    });
+    res.status(201).json({ product });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'A product with this SKU already exists' });
     next(err);
@@ -213,12 +233,19 @@ router.patch('/:id', canManage, async (req, res, next) => {
     if (values.categoryId && !(await categoryExists(values.categoryId))) {
       return res.status(400).json({ message: 'Category not found' });
     }
-    const [result] = await pool.query(
-      `UPDATE products SET ${fields.map((f) => `${PRODUCT_COLUMNS[f]} = ?`).join(', ')}, version = version + 1
-       WHERE id = ? AND version = ?`,
-      [...fields.map((f) => values[f]), id, version]
-    );
-    const product = await getProduct(id);
+    const { result, product } = await withTransaction(async (conn) => {
+      const before = await getProduct(id, conn);
+      const [updated] = await conn.query(
+        `UPDATE products SET ${fields.map((f) => `${PRODUCT_COLUMNS[f]} = ?`).join(', ')}, version = version + 1
+         WHERE id = ? AND version = ?`,
+        [...fields.map((f) => values[f]), id, version]
+      );
+      const after = await getProduct(id, conn);
+      if (updated.affectedRows > 0) {
+        await audit(conn, auditContext(req), { action: 'update', entity: 'product', entityId: id, label: after.sku, before, after });
+      }
+      return { result: updated, product: after };
+    });
     if (!product) return res.status(404).json({ message: 'Product not found' });
     if (result.affectedRows === 0) {
       return res.status(409).json({
@@ -252,7 +279,10 @@ router.delete('/:id', canManage, async (req, res, next) => {
     if (!product) return res.status(404).json({ message: 'Product not found' });
     if (product.inUse) return inUse(product.name);
 
-    await pool.query('DELETE FROM products WHERE id = ?', [id]);
+    await withTransaction(async (conn) => {
+      await conn.query('DELETE FROM products WHERE id = ?', [id]);
+      await audit(conn, auditContext(req), { action: 'delete', entity: 'product', entityId: id, label: product.sku, before: product });
+    });
     res.json({ message: `${product.sku} deleted` });
   } catch (err) {
     // Used between the check and the delete: the foreign keys refuse it.

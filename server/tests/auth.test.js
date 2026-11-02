@@ -27,6 +27,8 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 test('register: later sign-ups become Staff, emails are unique and stored lowercase', async () => {
   const email = `${tag.toLowerCase()}-new@test.invalid`;
   trackEmail(email);
+  // The very first account becomes Admin; make sure this isn't it, even on an empty database.
+  await createUser(tag, 'admin');
 
   const res = await api.call('POST', '/auth/register', { body: { name: '  New Person ', email: email.toUpperCase(), password: PASSWORD } });
   assert.equal(res.status, 201);

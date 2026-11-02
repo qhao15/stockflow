@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
-    "dev": "concurrently -n server,client -c blue,green \"npm run dev --prefix server\" \"npm run dev --prefix client\""
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev --prefix server\" \"node scripts/wait-for-api.js && npm run dev --prefix client\""
   },
   "devDependencies": {
     "concurrently": "^10.0.6"

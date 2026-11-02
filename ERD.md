@@ -192,7 +192,8 @@ erDiagram
         varchar action
         varchar entity_type
         int entity_id
-        json changes "old and new values"
+        varchar entity_label "SKU, PO number... at the time"
+        json changes "changed fields as [old, new]"
         varchar ip_address
         datetime created_at
     }

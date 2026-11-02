@@ -15,6 +15,7 @@ import { money } from '../../lib/agGrid';
 import { daysAgo, formatDate, formatDateTime } from '../../lib/format';
 import { StatusChip } from '../salesOrders/status';
 import ContactDialog from '../../components/ContactDialog';
+import AuditHistory from '../../components/AuditHistory';
 import { Field, Stat } from '../../components/DetailParts';
 
 const PAGE_SIZE = 20;
@@ -152,6 +153,9 @@ export default function CustomerDetail() {
               </Stack>
             </CardContent>
           </Card>
+          <Box sx={{ mt: 3 }}>
+            <AuditHistory entity="customer" entityId={customer.id} reloadKey={customer.updatedAt} />
+          </Box>
         </Grid>
 
         <Grid size={{ xs: 12, md: 8 }}>

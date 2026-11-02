@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { pool } from '../db/pool.js';
+import { pool, withTransaction } from '../db/pool.js';
+import { audit, auditContext } from '../services/audit.js';
 import { requireAuth, requirePermission } from '../auth/middleware.js';
 import { apiLimiter } from '../auth/rateLimit.js';
 import { getSupplier, listSuppliers } from '../services/suppliers.js';
@@ -63,13 +64,18 @@ router.post('/', canManage, async (req, res, next) => {
   if (error) return res.status(400).json({ message: error });
   const columns = Object.keys(values);
   try {
-    const [result] = await pool.query(
-      `INSERT INTO suppliers (code, ${columns.join(', ')}) VALUES (UUID_SHORT(), ${columns.map(() => '?').join(', ')})`,
-      columns.map((c) => values[c])
-    );
-    const id = result.insertId;
-    await pool.query('UPDATE suppliers SET code = ? WHERE id = ?', [`SUP-${String(id).padStart(3, '0')}`, id]);
-    res.status(201).json({ supplier: await getSupplier(id) });
+    const saved = await withTransaction(async (conn) => {
+      const [result] = await conn.query(
+        `INSERT INTO suppliers (code, ${columns.join(', ')}) VALUES (UUID_SHORT(), ${columns.map(() => '?').join(', ')})`,
+        columns.map((c) => values[c])
+      );
+      const id = result.insertId;
+      await conn.query('UPDATE suppliers SET code = ? WHERE id = ?', [`SUP-${String(id).padStart(3, '0')}`, id]);
+      const supplier = await getSupplier(id, conn);
+      await audit(conn, auditContext(req), { action: 'create', entity: 'supplier', entityId: id, label: supplier.name, after: supplier });
+      return supplier;
+    });
+    res.status(201).json({ supplier: saved });
   } catch (err) {
     next(err);
   }
@@ -84,12 +90,18 @@ router.patch('/:id', canManage, async (req, res, next) => {
   const columns = Object.keys(values);
   if (columns.length === 0) return res.status(400).json({ message: 'Nothing to update' });
   try {
-    const [result] = await pool.query(
-      `UPDATE suppliers SET ${columns.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
-      [...columns.map((c) => values[c]), id]
-    );
-    if (result.affectedRows === 0) return res.status(404).json({ message: 'Supplier not found' });
-    res.json({ supplier: await getSupplier(id) });
+    const saved = await withTransaction(async (conn) => {
+      const before = await getSupplier(id, conn);
+      if (!before) return null;
+      await conn.query(`UPDATE suppliers SET ${columns.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`, [
+        ...columns.map((c) => values[c]), id,
+      ]);
+      const after = await getSupplier(id, conn);
+      await audit(conn, auditContext(req), { action: 'update', entity: 'supplier', entityId: id, label: after.name, before, after });
+      return after;
+    });
+    if (!saved) return res.status(404).json({ message: 'Supplier not found' });
+    res.json({ supplier: saved });
   } catch (err) {
     next(err);
   }
@@ -109,7 +121,10 @@ router.delete('/:id', canManage, async (req, res, next) => {
     supplier = await getSupplier(id);
     if (!supplier) return res.status(404).json({ message: 'Supplier not found' });
     if (supplier.inUse) return inUse(supplier.name);
-    await pool.query('DELETE FROM suppliers WHERE id = ?', [id]);
+    await withTransaction(async (conn) => {
+      await conn.query('DELETE FROM suppliers WHERE id = ?', [id]);
+      await audit(conn, auditContext(req), { action: 'delete', entity: 'supplier', entityId: id, label: supplier.name, before: supplier });
+    });
     res.status(204).end();
   } catch (err) {
     // A PO was created between the check and the delete; the foreign key refuses.

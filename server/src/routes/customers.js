@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { pool } from '../db/pool.js';
+import { pool, withTransaction } from '../db/pool.js';
+import { audit, auditContext } from '../services/audit.js';
 import { requireAuth, requirePermission } from '../auth/middleware.js';
 import { apiLimiter } from '../auth/rateLimit.js';
 import { getCustomer, listCities, listCustomers } from '../services/customers.js';
@@ -71,13 +72,18 @@ router.post('/', canManage, async (req, res, next) => {
   if (error) return res.status(400).json({ message: error });
   const columns = Object.keys(values);
   try {
-    const [result] = await pool.query(
-      `INSERT INTO customers (code, ${columns.join(', ')}) VALUES (UUID_SHORT(), ${columns.map(() => '?').join(', ')})`,
-      columns.map((c) => values[c])
-    );
-    const id = result.insertId;
-    await pool.query('UPDATE customers SET code = ? WHERE id = ?', [`CUS-${String(id).padStart(5, '0')}`, id]);
-    res.status(201).json({ customer: await getCustomer(id) });
+    const saved = await withTransaction(async (conn) => {
+      const [result] = await conn.query(
+        `INSERT INTO customers (code, ${columns.join(', ')}) VALUES (UUID_SHORT(), ${columns.map(() => '?').join(', ')})`,
+        columns.map((c) => values[c])
+      );
+      const id = result.insertId;
+      await conn.query('UPDATE customers SET code = ? WHERE id = ?', [`CUS-${String(id).padStart(5, '0')}`, id]);
+      const customer = await getCustomer(id, conn);
+      await audit(conn, auditContext(req), { action: 'create', entity: 'customer', entityId: id, label: customer.name, after: customer });
+      return customer;
+    });
+    res.status(201).json({ customer: saved });
   } catch (err) {
     next(err);
   }
@@ -92,12 +98,18 @@ router.patch('/:id', canManage, async (req, res, next) => {
   const columns = Object.keys(values);
   if (columns.length === 0) return res.status(400).json({ message: 'Nothing to update' });
   try {
-    const [result] = await pool.query(
-      `UPDATE customers SET ${columns.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
-      [...columns.map((c) => values[c]), id]
-    );
-    if (result.affectedRows === 0) return res.status(404).json({ message: 'Customer not found' });
-    res.json({ customer: await getCustomer(id) });
+    const saved = await withTransaction(async (conn) => {
+      const before = await getCustomer(id, conn);
+      if (!before) return null;
+      await conn.query(`UPDATE customers SET ${columns.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`, [
+        ...columns.map((c) => values[c]), id,
+      ]);
+      const after = await getCustomer(id, conn);
+      await audit(conn, auditContext(req), { action: 'update', entity: 'customer', entityId: id, label: after.name, before, after });
+      return after;
+    });
+    if (!saved) return res.status(404).json({ message: 'Customer not found' });
+    res.json({ customer: saved });
   } catch (err) {
     next(err);
   }
@@ -117,7 +129,10 @@ router.delete('/:id', canManage, async (req, res, next) => {
     customer = await getCustomer(id);
     if (!customer) return res.status(404).json({ message: 'Customer not found' });
     if (customer.inUse) return inUse(customer.name);
-    await pool.query('DELETE FROM customers WHERE id = ?', [id]);
+    await withTransaction(async (conn) => {
+      await conn.query('DELETE FROM customers WHERE id = ?', [id]);
+      await audit(conn, auditContext(req), { action: 'delete', entity: 'customer', entityId: id, label: customer.name, before: customer });
+    });
     res.status(204).end();
   } catch (err) {
     // An order was created between the check and the delete; the foreign key refuses.

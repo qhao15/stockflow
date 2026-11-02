@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { pool } from '../db/pool.js';
+import { pool, withTransaction } from '../db/pool.js';
+import { audit, auditContext } from '../services/audit.js';
 import { ROLES } from '../auth/permissions.js';
 import { publicUser, requireAuth, requirePermission } from '../auth/middleware.js';
 import { apiLimiter } from '../auth/rateLimit.js';
@@ -42,17 +43,22 @@ router.patch('/:id', async (req, res, next) => {
   }
 
   try {
-    const [result] = await pool.query(
-      'UPDATE users SET role = COALESCE(?, role), is_active = COALESCE(?, is_active) WHERE id = ?',
-      [role ?? null, isActive === undefined ? null : Number(isActive), id]
-    );
-    if (result.affectedRows === 0) return res.status(404).json({ message: 'User not found' });
-
-    const [rows] = await pool.query(
-      'SELECT id, name, email, role, is_active, created_at FROM users WHERE id = ?',
-      [id]
-    );
-    res.json({ user: toUser(rows[0]) });
+    const load = async (conn) => {
+      const [rows] = await conn.query('SELECT id, name, email, role, is_active, created_at FROM users WHERE id = ?', [id]);
+      return rows[0] ? toUser(rows[0]) : null;
+    };
+    const user = await withTransaction(async (conn) => {
+      const before = await load(conn);
+      if (!before) return null;
+      await conn.query('UPDATE users SET role = COALESCE(?, role), is_active = COALESCE(?, is_active) WHERE id = ?', [
+        role ?? null, isActive === undefined ? null : Number(isActive), id,
+      ]);
+      const after = await load(conn);
+      await audit(conn, auditContext(req), { action: 'update', entity: 'user', entityId: id, label: after.email, before, after });
+      return after;
+    });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.json({ user });
   } catch (err) {
     next(err);
   }

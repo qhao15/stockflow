@@ -45,7 +45,10 @@ api.interceptors.response.use(
 );
 
 export function errorMessage(err, fallback = 'Something went wrong') {
-  return err.response?.data?.message ?? (err.response ? fallback : 'Cannot reach the server');
+  const { response } = err;
+  if (response?.data?.message) return response.data.message;
+  // A 5xx without our JSON body came from the dev proxy: the API itself isn't answering.
+  return !response || response.status >= 500 ? 'Cannot reach the server' : fallback;
 }
 
 // Downloads a file from the API (with the auth header, which a plain <a href> can't send).

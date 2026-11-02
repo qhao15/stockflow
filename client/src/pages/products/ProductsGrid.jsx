@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AgGridReact } from 'ag-grid-react';
 import {
-  Alert, Box, Button, Checkbox, Chip, Divider, FormControlLabel, IconButton, InputAdornment, ListItemText,
+  Alert, Box, Button, Checkbox, Chip, Divider, Drawer, FormControlLabel, IconButton, InputAdornment, ListItemText,
   Menu, MenuItem, Snackbar, Switch, TextField, Tooltip, Typography,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import HistoryIcon from '@mui/icons-material/History';
+import CloseIcon from '@mui/icons-material/Close';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
@@ -17,6 +20,7 @@ import { gridTheme, money } from '../../lib/agGrid';
 import ProductDialog from './ProductDialog';
 import ImportDialog from './ImportDialog';
 import DeleteProductDialog from './DeleteProductDialog';
+import AuditHistory from '../../components/AuditHistory';
 
 const PAGE_SIZE = 50;
 const COLUMNS_PREF = 'products.grid.columns';
@@ -47,10 +51,15 @@ function StatusCell({ data }) {
 export default function ProductsGrid({ options }) {
   const { can } = useAuth();
   const canManage = can('products.manage');
+  const canSeeHistory = can('audit_log.view');
+  // ?search=<SKU> opens the grid already searched (the audit log links here).
+  const [urlParams] = useSearchParams();
+  const initialSearch = urlParams.get('search') ?? '';
+  const [historyProduct, setHistoryProduct] = useState(null);
   const gridRef = useRef(null);
   const [total, setTotal] = useState(null);
-  const [filters, setFilters] = useState({ search: '', categoryId: '', status: 'all', lowStock: false });
-  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState({ search: initialSearch, categoryId: '', status: 'all', lowStock: false });
+  const [search, setSearch] = useState(initialSearch);
   const [toast, setToast] = useState(null);
   const [dialogProduct, setDialogProduct] = useState(undefined); // undefined = closed, null = new
   const [importOpen, setImportOpen] = useState(false);
@@ -194,12 +203,17 @@ export default function ProductsGrid({ options }) {
       },
       ...(canManage
         ? [{
-          // Fixed width that fits the two icons; without width AG Grid defaults to 200px.
-          colId: 'actions', headerName: 'Action', width: 84, pinned: 'right', sortable: false, resizable: false,
+          // Fixed width that fits the icons (a third, History, for Admins); without width AG Grid defaults to 200px.
+          colId: 'actions', headerName: 'Action', width: canSeeHistory ? 116 : 84, pinned: 'right', sortable: false, resizable: false,
           suppressMovable: true, lockVisible: true, headerClass: 'header-center',
           cellStyle: { padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' },
           cellRenderer: ({ data }) => data && (
             <>
+              {canSeeHistory && (
+                <Tooltip title="History">
+                  <IconButton size="small" onClick={() => setHistoryProduct(data)}><HistoryIcon fontSize="small" /></IconButton>
+                </Tooltip>
+              )}
               <Tooltip title="Edit">
                 <IconButton size="small" onClick={() => setDialogProduct(data)}><EditIcon fontSize="small" /></IconButton>
               </Tooltip>
@@ -215,7 +229,7 @@ export default function ProductsGrid({ options }) {
         }]
         : []),
     ];
-  }, [canManage]);
+  }, [canManage, canSeeHistory]);
 
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true }), []);
   const hideableColumns = columnDefs.filter((c) => !c.lockVisible && c.colId !== 'sku');
@@ -349,6 +363,21 @@ export default function ProductsGrid({ options }) {
         onClose={() => setDialogProduct(undefined)}
         onSaved={onSaved}
       />
+      <Drawer anchor="right" open={Boolean(historyProduct)} onClose={() => setHistoryProduct(null)}
+        PaperProps={{ sx: { width: { xs: '100%', sm: 560 }, p: 3 } }}>
+        {historyProduct && (
+          <>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <Typography sx={{ fontFamily: 'monospace', fontSize: 13 }}>{historyProduct.sku}</Typography>
+                <Typography color="text.secondary" noWrap>{historyProduct.name}</Typography>
+              </Box>
+              <IconButton onClick={() => setHistoryProduct(null)} aria-label="Close"><CloseIcon /></IconButton>
+            </Box>
+            <AuditHistory entity="product" entityId={historyProduct.id} card={false} />
+          </>
+        )}
+      </Drawer>
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} onImported={refresh} />
       <DeleteProductDialog
         product={deletingProduct}
