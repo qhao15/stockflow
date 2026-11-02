@@ -77,7 +77,6 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
 
 ### Coming soon
 
-- **Chatbot**: a chat assistant inside the app that answers questions about products, stock and orders, limited to what the user's role can already see.
 - **Updating**: more updates are being planned.
 
 ### Stock traceability
@@ -523,7 +522,6 @@ Progress is tracked on the [project board](https://github.com/users/qhao15/proje
 - [x] Dashboard charts and reports ([#10](https://github.com/qhao15/stockflow/issues/10))
 - [x] Audit log ([#11](https://github.com/qhao15/stockflow/issues/11))
 
-**[v0.4 Chatbot & updates](https://github.com/qhao15/stockflow/milestone/4)** · coming soon
+**[v0.4 Updates](https://github.com/qhao15/stockflow/milestone/4)** · coming soon
 
-- [ ] Chatbot assistant ([#38](https://github.com/qhao15/stockflow/issues/38))
 - [ ] Updating ([#39](https://github.com/qhao15/stockflow/issues/39))
