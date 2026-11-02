@@ -77,8 +77,8 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
 
 ### Coming soon
 
-- **Chatbot**: a chat assistant inside the app that answers questions about products, stock and orders, limited to what the user's role can already see ([#38](https://github.com/qhao15/stockflow/issues/38)).
-- **Updating**: more updates are being planned ([#39](https://github.com/qhao15/stockflow/issues/39)).
+- **Chatbot**: a chat assistant inside the app that answers questions about products, stock and orders, limited to what the user's role can already see.
+- **Updating**: more updates are being planned.
 
 ### Stock traceability
 
