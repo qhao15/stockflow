@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool, withTransaction } from '../db/pool.js';
 import { requireAuth, requirePermission } from '../auth/middleware.js';
 import { validateWarehouse } from '../validators/stock.js';
+import { audit, auditContext } from '../services/audit.js';
 import { apiLimiter } from '../auth/rateLimit.js';
 
 const router = Router();
@@ -62,10 +63,15 @@ router.post('/', canManage, async (req, res, next) => {
   const { values, error } = validateWarehouse(req.body);
   if (error) return res.status(400).json({ message: error });
   try {
-    const [result] = await pool.query('INSERT INTO warehouses (code, name, city, address, is_active) VALUES (?, ?, ?, ?, ?)', [
-      values.code, values.name, values.city, values.address, values.is_active ?? 1,
-    ]);
-    res.status(201).json({ warehouse: await findWarehouse(result.insertId) });
+    const warehouse = await withTransaction(async (conn) => {
+      const [result] = await conn.query('INSERT INTO warehouses (code, name, city, address, is_active) VALUES (?, ?, ?, ?, ?)', [
+        values.code, values.name, values.city, values.address, values.is_active ?? 1,
+      ]);
+      const saved = await findWarehouse(result.insertId, conn);
+      await audit(conn, auditContext(req), { action: 'create', entity: 'warehouse', entityId: saved.id, label: saved.code, after: saved });
+      return saved;
+    });
+    res.status(201).json({ warehouse });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return duplicate(res);
     next(err);
@@ -86,6 +92,7 @@ router.patch('/:id', canManage, async (req, res, next) => {
       // Locking the row makes transfers into it (which share-lock it) wait for this.
       const [[row]] = await conn.query('SELECT id, name FROM warehouses WHERE id = ? FOR UPDATE', [id]);
       if (!row) return { status: 404, body: { message: 'Warehouse not found' } };
+      const before = await findWarehouse(id, conn);
       if (values.is_active === 0) {
         const [[{ units }]] = await conn.query('SELECT COALESCE(SUM(quantity), 0) AS units FROM stock WHERE warehouse_id = ?', [id]);
         if (Number(units) > 0) {
@@ -98,7 +105,9 @@ router.patch('/:id', canManage, async (req, res, next) => {
       await conn.query(`UPDATE warehouses SET ${fields.map((f) => `${f} = ?`).join(', ')} WHERE id = ?`, [
         ...fields.map((f) => values[f]), id,
       ]);
-      return { status: 200, body: { warehouse: await findWarehouse(id, conn) } };
+      const after = await findWarehouse(id, conn);
+      await audit(conn, auditContext(req), { action: 'update', entity: 'warehouse', entityId: id, label: after.code, before, after });
+      return { status: 200, body: { warehouse: after } };
     });
     res.status(result.status).json(result.body);
   } catch (err) {
@@ -124,6 +133,7 @@ router.delete('/:id', canManage, async (req, res, next) => {
     await withTransaction(async (conn) => {
       await conn.query('DELETE FROM stock WHERE warehouse_id = ? AND quantity = 0', [id]);
       await conn.query('DELETE FROM warehouses WHERE id = ?', [id]);
+      await audit(conn, auditContext(req), { action: 'delete', entity: 'warehouse', entityId: id, label: warehouse.code, before: warehouse });
     });
     res.status(204).end();
   } catch (err) {

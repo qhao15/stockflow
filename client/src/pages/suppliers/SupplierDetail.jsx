@@ -15,6 +15,7 @@ import { money } from '../../lib/agGrid';
 import { daysAgo, formatDate } from '../../lib/format';
 import { StatusChip } from '../purchaseOrders/status';
 import ContactDialog from '../../components/ContactDialog';
+import AuditHistory from '../../components/AuditHistory';
 import { Field, Stat } from '../../components/DetailParts';
 
 const PAGE_SIZE = 20;
@@ -156,6 +157,9 @@ export default function SupplierDetail() {
               </Stack>
             </CardContent>
           </Card>
+          <Box sx={{ mt: 3 }}>
+            <AuditHistory entity="supplier" entityId={supplier.id} reloadKey={supplier.updatedAt} />
+          </Box>
         </Grid>
 
         <Grid size={{ xs: 12, md: 8 }}>

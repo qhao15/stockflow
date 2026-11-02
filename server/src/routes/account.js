@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { pool } from '../db/pool.js';
+import { pool, withTransaction } from '../db/pool.js';
+import { audit, auditContext } from '../services/audit.js';
 import { publicUser, requireAuth, signToken } from '../auth/middleware.js';
 import { EMAIL_RE, MIN_PASSWORD_LENGTH } from '../validators/common.js';
 import { apiLimiter } from '../auth/rateLimit.js';
@@ -20,7 +21,13 @@ router.patch('/', async (req, res, next) => {
   if (!EMAIL_RE.test(email)) return res.status(400).json({ message: 'Please enter a valid email' });
 
   try {
-    await pool.query('UPDATE users SET name = ?, email = ? WHERE id = ?', [name, email, req.user.id]);
+    await withTransaction(async (conn) => {
+      await conn.query('UPDATE users SET name = ?, email = ? WHERE id = ?', [name, email, req.user.id]);
+      await audit(conn, auditContext(req), {
+        action: 'update', entity: 'user', entityId: req.user.id, label: email,
+        before: { name: req.user.name, email: req.user.email }, after: { name, email },
+      });
+    });
     res.json({ user: { ...req.user, name, email } });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Another account already uses this email' });
@@ -51,9 +58,13 @@ router.put('/password', async (req, res, next) => {
     // Whole seconds, to match the token's iat (also whole seconds).
     const changedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await pool.query('UPDATE users SET password_hash = ?, password_changed_at = ? WHERE id = ?', [
-      passwordHash, changedAt, req.user.id,
-    ]);
+    // Logged without any values: only that the password was changed, and when.
+    await withTransaction(async (conn) => {
+      await conn.query('UPDATE users SET password_hash = ?, password_changed_at = ? WHERE id = ?', [
+        passwordHash, changedAt, req.user.id,
+      ]);
+      await audit(conn, auditContext(req), { action: 'password_change', entity: 'user', entityId: req.user.id, label: req.user.email, changes: {} });
+    });
     res.json({ token: signToken(req.user), user: publicUser(req.user) });
   } catch (err) {
     next(err);

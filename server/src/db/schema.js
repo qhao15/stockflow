@@ -242,13 +242,16 @@ const tables = [
     CONSTRAINT chk_movements_change CHECK (quantity_change <> 0 AND balance_after >= 0)
   ) ENGINE=InnoDB`,
 
-  // changes holds { field: [old, new] } for updates, or the created/deleted record.
+  // Who changed what. Written in the same transaction as the change (services/audit.js).
+  // changes holds { field: [old, new] } for the fields that changed - [null, value] for a
+  // new record, [value, null] for a deleted one - or the details of an action (a transfer).
   `CREATE TABLE IF NOT EXISTS audit_logs (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id INT UNSIGNED NULL,
     action VARCHAR(50) NOT NULL,
     entity_type VARCHAR(50) NOT NULL,
     entity_id INT UNSIGNED NULL,
+    entity_label VARCHAR(150) NULL,
     changes JSON NULL,
     ip_address VARCHAR(45) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -272,6 +275,8 @@ const addedColumns = [
   ['customers', 'notes', 'VARCHAR(1000) NULL AFTER address'],
   ['suppliers', 'city', 'VARCHAR(100) NULL AFTER phone'],
   ['suppliers', 'notes', 'VARCHAR(1000) NULL AFTER address'],
+  // The record's name at the time (SKU, PO number...), so the log reads well after a delete.
+  ['audit_logs', 'entity_label', 'VARCHAR(150) NULL AFTER entity_id'],
 ];
 
 // Runs once, right after its column is added.

@@ -13,6 +13,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { money } from '../../lib/agGrid';
 import { formatDateTime } from '../../lib/format';
 import { StatusChip } from './status';
+import AuditHistory from '../../components/AuditHistory';
 
 function Field({ label, children }) {
   return (
@@ -177,6 +178,9 @@ export default function SalesOrderDetail() {
               </Stack>
             </CardContent>
           </Card>
+          <Box sx={{ mt: 3 }}>
+            <AuditHistory entity="sales_order" entityId={order.id} reloadKey={order.status} />
+          </Box>
         </Grid>
       </Grid>
 

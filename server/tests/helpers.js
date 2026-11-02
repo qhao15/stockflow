@@ -65,6 +65,8 @@ export async function cleanupUsers() {
     rows.forEach((r) => userIds.add(r.id));
   }
   if (userIds.size) {
+    // Audit rows written by test users (their test changes) go too, so the log stays real.
+    await pool.query('DELETE FROM audit_logs WHERE user_id IN (?)', [[...userIds]]);
     await pool.query('DELETE FROM user_preferences WHERE user_id IN (?)', [[...userIds]]);
     await pool.query('DELETE FROM users WHERE id IN (?)', [[...userIds]]);
   }

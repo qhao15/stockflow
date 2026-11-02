@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { pool } from '../db/pool.js';
+import { pool, withTransaction } from '../db/pool.js';
+import { audit, auditContext } from '../services/audit.js';
 import { requireAuth, requirePermission } from '../auth/middleware.js';
 import { apiLimiter } from '../auth/rateLimit.js';
 
@@ -30,8 +31,8 @@ function validateCategory(body, { partial = false } = {}) {
 
 const duplicate = (res) => res.status(409).json({ message: 'Another category already uses this code or name' });
 
-async function findCategory(id) {
-  const [rows] = await pool.query(
+async function findCategory(id, conn = pool) {
+  const [rows] = await conn.query(
     `SELECT c.id, c.code, c.name, c.description, COUNT(p.id) AS productCount
      FROM categories c LEFT JOIN products p ON p.category_id = c.id
      WHERE c.id = ? GROUP BY c.id`,
@@ -59,10 +60,15 @@ router.post('/', requirePermission('products.manage'), async (req, res, next) =>
   const { values, error } = validateCategory(req.body);
   if (error) return res.status(400).json({ message: error });
   try {
-    const [result] = await pool.query('INSERT INTO categories (code, name, description) VALUES (?, ?, ?)', [
-      values.code, values.name, values.description,
-    ]);
-    res.status(201).json({ category: await findCategory(result.insertId) });
+    const category = await withTransaction(async (conn) => {
+      const [result] = await conn.query('INSERT INTO categories (code, name, description) VALUES (?, ?, ?)', [
+        values.code, values.name, values.description,
+      ]);
+      const saved = await findCategory(result.insertId, conn);
+      await audit(conn, auditContext(req), { action: 'create', entity: 'category', entityId: saved.id, label: saved.name, after: saved });
+      return saved;
+    });
+    res.status(201).json({ category });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return duplicate(res);
     next(err);
@@ -76,12 +82,19 @@ router.patch('/:id', requirePermission('products.manage'), async (req, res, next
   const fields = Object.keys(values);
   if (fields.length === 0) return res.status(400).json({ message: 'Nothing to update' });
   try {
-    const [result] = await pool.query(
-      `UPDATE categories SET ${fields.map((f) => `${f} = ?`).join(', ')} WHERE id = ?`,
-      [...fields.map((f) => values[f]), Number(req.params.id)]
-    );
-    if (result.affectedRows === 0) return res.status(404).json({ message: 'Category not found' });
-    res.json({ category: await findCategory(Number(req.params.id)) });
+    const id = Number(req.params.id);
+    const category = await withTransaction(async (conn) => {
+      const before = await findCategory(id, conn);
+      if (!before) return null;
+      await conn.query(`UPDATE categories SET ${fields.map((f) => `${f} = ?`).join(', ')} WHERE id = ?`, [
+        ...fields.map((f) => values[f]), id,
+      ]);
+      const after = await findCategory(id, conn);
+      await audit(conn, auditContext(req), { action: 'update', entity: 'category', entityId: id, label: after.name, before, after });
+      return after;
+    });
+    if (!category) return res.status(404).json({ message: 'Category not found' });
+    res.json({ category });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return duplicate(res);
     next(err);
@@ -98,7 +111,10 @@ router.delete('/:id', requirePermission('products.manage'), async (req, res, nex
         message: `"${category.name}" still has ${category.productCount} product(s). Move them to another category first.`,
       });
     }
-    await pool.query('DELETE FROM categories WHERE id = ?', [category.id]);
+    await withTransaction(async (conn) => {
+      await conn.query('DELETE FROM categories WHERE id = ?', [category.id]);
+      await audit(conn, auditContext(req), { action: 'delete', entity: 'category', entityId: category.id, label: category.name, before: category });
+    });
     res.status(204).end();
   } catch (err) {
     // A product was added to it between the check and the delete; the foreign key refuses.

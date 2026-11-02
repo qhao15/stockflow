@@ -25,6 +25,7 @@ const CustomersPage = lazy(() => import('./pages/customers/CustomersPage'));
 const CustomerDetail = lazy(() => import('./pages/customers/CustomerDetail'));
 const SuppliersPage = lazy(() => import('./pages/suppliers/SuppliersPage'));
 const SupplierDetail = lazy(() => import('./pages/suppliers/SupplierDetail'));
+const AuditLogPage = lazy(() => import('./pages/auditLog/AuditLogPage'));
 
 // Modules that have a real page; the rest show "Coming soon" for now.
 const pages = {
@@ -35,6 +36,7 @@ const pages = {
   '/sales-orders': SalesOrdersPage,
   '/customers': CustomersPage,
   '/suppliers': SuppliersPage,
+  '/audit-log': AuditLogPage,
 };
 
 // Pages below a module (detail, form), each with the permission it needs.

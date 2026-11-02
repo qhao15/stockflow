@@ -14,6 +14,7 @@ import api, { errorMessage } from '../../lib/api';
 import { useAuth } from '../../auth/AuthContext';
 import { money } from '../../lib/agGrid';
 import { StatusChip } from './status';
+import AuditHistory from '../../components/AuditHistory';
 import { formatDate, formatDateTime } from '../../lib/format';
 
 function Field({ label, children }) {
@@ -219,6 +220,9 @@ export default function PurchaseOrderDetail() {
               <Timeline order={order} />
             </CardContent>
           </Card>
+          <Box sx={{ mt: 3 }}>
+            <AuditHistory entity="purchase_order" entityId={order.id} reloadKey={order.version} />
+          </Box>
         </Grid>
       </Grid>
 

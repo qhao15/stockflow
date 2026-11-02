@@ -27,7 +27,7 @@ export default function SalesOrderForm() {
   const [discount, setDiscount] = useState('');
   const [note, setNote] = useState('');
   const [items, setItems] = useState([]);
-  const [available, setAvailable] = useState({}); // productId -> quantity in the chosen warehouse
+  const [quantities, setQuantities] = useState({}); // productId -> { warehouseId: quantity }
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -42,17 +42,18 @@ export default function SalesOrderForm() {
       .catch((err) => setError(errorMessage(err, 'Could not load warehouses')));
   }, []);
 
-  // Refresh what's available whenever the warehouse or the set of products changes.
+  // Refresh what's available whenever the warehouse or the set of products changes. Loaded
+  // before a warehouse is picked too, so the numbers can help choose one.
   const productIds = useMemo(() => items.map((i) => i.product.id), [items]);
   const idsKey = productIds.join(',');
   useEffect(() => {
-    if (!warehouseId || !idsKey) return;
+    if (!idsKey) return;
     let cancelled = false;
     api
       .get('/stock', { params: { ids: idsKey, limit: 500 } })
       .then((res) => {
         if (cancelled) return;
-        setAvailable(Object.fromEntries(res.data.rows.map((r) => [r.id, r.quantities[warehouseId] ?? 0])));
+        setQuantities(Object.fromEntries(res.data.rows.map((r) => [r.id, r.quantities])));
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -65,7 +66,8 @@ export default function SalesOrderForm() {
   const lines = items.map((item) => {
     const qty = Number(item.quantity);
     const valid = Number.isInteger(qty) && qty > 0;
-    const stock = warehouseId ? available[item.product.id] : undefined;
+    const inWarehouses = quantities[item.product.id];
+    const stock = warehouseId && inWarehouses ? inWarehouses[warehouseId] ?? 0 : undefined;
     return {
       ...item,
       valid,
@@ -99,7 +101,7 @@ export default function SalesOrderForm() {
       // Someone sold the stock in the meantime: refresh the available numbers.
       if (err.response?.data?.reason === 'insufficient_stock') {
         const { productId, available: left } = err.response.data;
-        setAvailable((prev) => ({ ...prev, [productId]: left }));
+        setQuantities((prev) => ({ ...prev, [productId]: { ...prev[productId], [warehouseId]: left } }));
       }
       setError(errorMessage(err, 'Could not create the order'));
       setSaving(false);
@@ -165,7 +167,13 @@ export default function SalesOrderForm() {
                       <Typography variant="body2">{line.product.name}</Typography>
                     </TableCell>
                     <TableCell align="center" sx={{ color: line.stock === 0 || line.short ? 'error.main' : 'text.primary', fontWeight: line.short ? 600 : 400 }}>
-                      {warehouseId ? (line.stock ?? '…') : '—'}
+                      {warehouseId && (line.stock?.toLocaleString() ?? '…')}
+                      {/* No warehouse picked yet: show each one, to help choose. */}
+                      {!warehouseId && warehouses.map((w) => (
+                        <Typography key={w.id} variant="caption" color="text.secondary" sx={{ display: 'block', whiteSpace: 'nowrap' }}>
+                          {w.code}: {(quantities[line.product.id]?.[w.id] ?? 0).toLocaleString()}
+                        </Typography>
+                      ))}
                     </TableCell>
                     <TableCell>
                       <TextField size="small" type="number" value={line.quantity} onChange={setQuantity(index)} required
@@ -184,7 +192,7 @@ export default function SalesOrderForm() {
                 ))}
               </TableBody>
             </Table>
-            <ProductPicker onSelect={addProduct} excludeIds={productIds} />
+            <ProductPicker onSelect={addProduct} excludeIds={productIds} warehouses={warehouses} warehouseId={warehouseId} />
 
             {lines.length > 0 && (
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
