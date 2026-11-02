@@ -182,6 +182,7 @@ const tables = [
     cancel_reason VARCHAR(255) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_so_status_date (status, order_date),
     CONSTRAINT fk_so_customer FOREIGN KEY (customer_id) REFERENCES customers (id),
     CONSTRAINT fk_so_warehouse FOREIGN KEY (warehouse_id) REFERENCES warehouses (id),
     CONSTRAINT fk_so_created_by FOREIGN KEY (created_by) REFERENCES users (id),
@@ -288,6 +289,12 @@ const backfills = {
                      WHERE city IS NULL AND address LIKE '%,%'`,
 };
 
+// Indexes for tables that already exist (new databases get them from CREATE TABLE). Chosen
+// by measuring on the large seed: see "Performance" in the README.
+const addedIndexes = [
+  ['sales_orders', 'idx_so_status_date', '(status, order_date)'],
+];
+
 // Foreign keys for columns added above (new databases get them from CREATE TABLE).
 const addedForeignKeys = [
   ['purchase_orders', 'fk_po_cancelled_by', 'FOREIGN KEY (cancelled_by) REFERENCES users (id)'],
@@ -307,6 +314,13 @@ export async function ensureSchema() {
       const backfill = backfills[`${table}.${column}`];
       if (backfill) await pool.query(backfill);
     }
+  }
+  for (const [table, name, columns] of addedIndexes) {
+    const [rows] = await pool.query(
+      'SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? LIMIT 1',
+      [table, name]
+    );
+    if (rows.length === 0) await pool.query(`ALTER TABLE ${table} ADD INDEX ${name} ${columns}`);
   }
   for (const [table, name, definition] of addedForeignKeys) {
     const [rows] = await pool.query(

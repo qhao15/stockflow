@@ -11,6 +11,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import CloseIcon from '@mui/icons-material/Close';
 import api, { errorMessage } from '../../lib/api';
+import useLastValue from '../../lib/useLastValue';
 import { useAuth } from '../../auth/AuthContext';
 import { money } from '../../lib/agGrid';
 import { StatusChip } from './status';
@@ -82,6 +83,7 @@ export default function PurchaseOrderDetail() {
   const [order, setOrder] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [confirm, setConfirm] = useState(null); // 'approve' | 'receive' | 'cancel'
+  const confirmShown = useLastValue(confirm);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
@@ -137,7 +139,7 @@ export default function PurchaseOrderDetail() {
     receive: status === 'approved' && can('purchase_orders.receive'),
     cancel: ['draft', 'approved'].includes(status) && can('purchase_orders.cancel'),
   };
-  const action = confirm && ACTIONS[confirm];
+  const action = confirmShown && ACTIONS[confirmShown];
 
   return (
     <Box sx={{ maxWidth: 1100 }}>
@@ -226,21 +228,21 @@ export default function PurchaseOrderDetail() {
         </Grid>
       </Grid>
 
-      <Dialog open={Boolean(action)} onClose={busy ? undefined : () => setConfirm(null)} maxWidth="xs" fullWidth>
+      <Dialog open={Boolean(confirm)} onClose={busy ? undefined : () => setConfirm(null)} maxWidth="xs" fullWidth>
         {action && (
           <>
             <DialogTitle>{action.title}</DialogTitle>
             <DialogContent>
               <DialogContentText>{action.text(order)}</DialogContentText>
-              {confirm === 'cancel' && (
+              {confirmShown === 'cancel' && (
                 <TextField label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} required autoFocus fullWidth
                   multiline minRows={2} sx={{ mt: 2 }} inputProps={{ maxLength: 255 }} />
               )}
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setConfirm(null)} disabled={busy} autoFocus={confirm !== 'cancel'}>Back</Button>
-              <Button variant="contained" color={confirm === 'cancel' ? 'error' : confirm === 'receive' ? 'success' : 'primary'}
-                onClick={run} disabled={busy || (confirm === 'cancel' && !reason.trim())}>
+              <Button onClick={() => setConfirm(null)} disabled={busy} autoFocus={confirmShown !== 'cancel'}>Back</Button>
+              <Button variant="contained" color={confirmShown === 'cancel' ? 'error' : confirmShown === 'receive' ? 'success' : 'primary'}
+                onClick={run} disabled={busy || (confirmShown === 'cancel' && !reason.trim())}>
                 {busy ? 'Working...' : action.button}
               </Button>
             </DialogActions>

@@ -15,6 +15,7 @@ import purchaseOrdersRouter from './routes/purchaseOrders.js';
 import customersRouter from './routes/customers.js';
 import salesOrdersRouter from './routes/salesOrders.js';
 import auditLogsRouter from './routes/auditLogs.js';
+import reportsRouter from './routes/reports.js';
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use('/api/purchase-orders', purchaseOrdersRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/sales-orders', salesOrdersRouter);
 app.use('/api/audit-logs', auditLogsRouter);
+app.use('/api/reports', reportsRouter);
 
 app.use((req, res) => res.status(404).json({ message: 'Not found' }));
 

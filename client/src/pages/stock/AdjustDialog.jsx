@@ -3,18 +3,20 @@ import {
   Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography,
 } from '@mui/material';
 import api, { errorMessage } from '../../lib/api';
+import useLastValue from '../../lib/useLastValue';
 
 // Sets the quantity in one warehouse to what was counted. The quantity shown here is
 // sent as expectedQuantity: if stock changed meanwhile (a sale, a transfer), the server
 // refuses instead of silently overwriting it.
-export default function AdjustDialog({ product, warehouses, reasons, onClose, onDone, onError }) {
+export default function AdjustDialog({ product: selected, warehouses, reasons, onClose, onDone, onError }) {
+  const product = useLastValue(selected);
   const [form, setForm] = useState({ warehouseId: '', countedQuantity: '', reason: 'stock_take', note: '' });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!product) return;
+    if (!selected) return;
     setForm({ warehouseId: warehouses[0]?.id ?? '', countedQuantity: '', reason: 'stock_take', note: '' });
-  }, [product, warehouses]);
+  }, [selected, warehouses]);
 
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
@@ -48,7 +50,7 @@ export default function AdjustDialog({ product, warehouses, reasons, onClose, on
   };
 
   return (
-    <Dialog open={Boolean(product)} onClose={saving ? undefined : onClose} maxWidth="xs" fullWidth>
+    <Dialog open={Boolean(selected)} onClose={saving ? undefined : onClose} maxWidth="xs" fullWidth>
       <form onSubmit={submit}>
         <DialogTitle>Adjust stock</DialogTitle>
         <DialogContent>

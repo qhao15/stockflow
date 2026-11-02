@@ -12,4 +12,4 @@ export const gridTheme = themeQuartz.withParams({
   wrapperBorderRadius: 10,
 });
 
-export const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+export { money } from './format';

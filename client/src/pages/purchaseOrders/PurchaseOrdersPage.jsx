@@ -17,6 +17,7 @@ const center = { textAlign: 'center', justifyContent: 'center' };
 
 export default function PurchaseOrdersPage() {
   const { can } = useAuth();
+  const canOpenSupplier = can('suppliers.view');
   const navigate = useNavigate();
   const gridRef = useRef(null);
   const [options, setOptions] = useState({ suppliers: [], warehouses: [] });
@@ -72,7 +73,13 @@ export default function PurchaseOrdersPage() {
         </Link>
       ),
     },
-    { colId: 'supplier', headerName: 'Supplier', flex: 1, minWidth: 200, valueGetter: ({ data }) => data?.supplier.name },
+    {
+      colId: 'supplier', headerName: 'Supplier', flex: 1, minWidth: 200,
+      valueGetter: ({ data }) => data?.supplier.name,
+      cellRenderer: ({ data, value }) => (data && canOpenSupplier ? (
+        <Link component={RouterLink} to={`/suppliers/${data.supplier.id}`} underline="hover">{value}</Link>
+      ) : value),
+    },
     { colId: 'warehouse', headerName: 'Warehouse', width: 110, minWidth: 110, cellStyle: center, headerClass: 'header-center', valueGetter: ({ data }) => data?.warehouse.code },
     { colId: 'items', headerName: 'Lines', width: 80, minWidth: 80, sortable: false, cellStyle: center, headerClass: 'header-center', valueGetter: ({ data }) => data?.itemCount },
     { colId: 'units', headerName: 'Units', width: 90, minWidth: 90, sortable: false, cellStyle: center, headerClass: 'header-center', valueGetter: ({ data }) => data?.unitCount.toLocaleString() },
@@ -84,7 +91,7 @@ export default function PurchaseOrdersPage() {
       cellRenderer: ({ value }) => value && <StatusChip status={value} />,
     },
     { colId: 'createdBy', headerName: 'Created by', width: 120, minWidth: 120, cellStyle: center, headerClass: 'header-center', sortable: false, valueGetter: ({ data }) => data?.createdBy?.name },
-  ], []);
+  ], [canOpenSupplier]);
 
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true }), []);
   const setFilter = (field) => (e) => setFilters((prev) => ({ ...prev, [field]: e.target.value }));

@@ -1,24 +1,50 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
-  Box, Card, CardActionArea, CardContent, Chip, Skeleton, Typography,
+  Alert, Box, Card, CardActionArea, CardContent, Chip, Skeleton, Typography,
 } from '@mui/material';
 import Grid from '@mui/material/Grid2';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import api from '../lib/api';
+import api, { errorMessage } from '../lib/api';
+import { money } from '../lib/format';
 import { navItems } from '../navItems';
 import { LogoMark } from '../components/Logo';
 import { useAuth } from '../auth/AuthContext';
+import LowStockTable from './dashboard/LowStockTable';
 
-// Placeholder KPIs - wired to real data once the sales/stock modules exist.
-const kpis = [
-  { label: 'Revenue (this month)', value: '—', icon: TrendingUpIcon, color: '#1e5eff', permission: 'reports.view' },
-  { label: 'Sales orders', value: '—', icon: ReceiptLongIcon, color: '#12b76a' },
-  { label: 'Products', value: '—', icon: Inventory2Icon, color: '#7a5af8' },
-  { label: 'Low-stock items', value: '—', icon: WarningAmberIcon, color: '#f79009' },
+// Loaded only for roles that see the charts: Recharts is large.
+const DashboardCharts = lazy(() => import('./dashboard/DashboardCharts'));
+
+// Revenue so far this month against the same days of last month.
+function revenueChange(summary) {
+  const previous = summary.revenueLastMonthToDate;
+  if (!previous) return 'No sales in the same days last month';
+  const percent = Math.round(((summary.revenueThisMonth - previous) / previous) * 100);
+  return `${percent >= 0 ? '+' : ''}${percent}% vs same days last month`;
+}
+
+// summary is null until loaded; the revenue fields are only sent to roles allowed to see them.
+const kpis = (s) => [
+  {
+    label: 'Revenue (this month)', icon: TrendingUpIcon, color: '#1e5eff', permission: 'reports.view',
+    value: s && s.revenueThisMonth !== undefined ? money.format(s.revenueThisMonth) : null,
+    hint: s && s.revenueThisMonth !== undefined ? revenueChange(s) : '',
+  },
+  {
+    label: 'Sales orders (this month)', icon: ReceiptLongIcon, color: '#12b76a', to: '/sales-orders',
+    value: s?.ordersThisMonth.toLocaleString(), hint: s ? `${s.ordersLastMonth.toLocaleString()} last month` : '',
+  },
+  {
+    label: 'Active products', icon: Inventory2Icon, color: '#7a5af8', to: '/products',
+    value: s?.activeProducts.toLocaleString(), hint: 'In the catalog',
+  },
+  {
+    label: 'Low-stock products', icon: WarningAmberIcon, color: '#f79009', to: '/stock?lowStock=1',
+    value: s?.lowStockProducts.toLocaleString(), hint: 'At or below minimum',
+  },
 ];
 
 // Based on the computer's local time.
@@ -29,24 +55,29 @@ function greeting(hour = new Date().getHours()) {
   return 'Good night';
 }
 
+// Admins only. The public health check says only whether things are up; the database's
+// name and version come from a separate Admin endpoint, and errors go to the server log.
 function SystemStatus() {
   const [health, setHealth] = useState(null);
   const [offline, setOffline] = useState(false);
+  const [database, setDatabase] = useState(null);
 
   useEffect(() => {
     api
       .get('/health')
       .then((res) => setHealth(res.data))
       .catch((err) => {
-        // 503 still carries a body describing the DB error
+        // 503 still answers: the API is up but the database isn't
         if (err.response?.data?.api) setHealth(err.response.data);
         else setOffline(true);
       });
+    api.get('/health/details').then((res) => setDatabase(res.data.database)).catch(() => {});
   }, []);
 
   if (!health && !offline) return <Skeleton variant="rounded" height={90} />;
 
   const dbOk = health?.database?.status === 'connected';
+  const dbLabel = database ? `Database: ${database.name} (v${database.version})` : 'Database: connected';
 
   return (
     <Card>
@@ -56,15 +87,11 @@ function SystemStatus() {
         </Typography>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Chip label={offline ? 'API: offline' : 'API: online'} color={offline ? 'error' : 'success'} size="small" />
-          <Chip
-            label={dbOk ? `MySQL: ${health.database.name} (v${health.database.version})` : 'MySQL: disconnected'}
-            color={dbOk ? 'success' : 'error'}
-            size="small"
-          />
+          <Chip label={dbOk ? dbLabel : 'Database: disconnected'} color={dbOk ? 'success' : 'error'} size="small" />
         </Box>
-        {!dbOk && health?.database?.error && (
-          <Typography variant="caption" color="error" sx={{ display: 'block', mt: 1 }}>
-            {health.database.error}
+        {!dbOk && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+            See the server log for details.
           </Typography>
         )}
       </CardContent>
@@ -74,7 +101,17 @@ function SystemStatus() {
 
 export default function Dashboard() {
   const { user, can } = useAuth();
-  const visibleKpis = kpis.filter((kpi) => can(kpi.permission));
+  const [summary, setSummary] = useState(null);
+  const [summaryError, setSummaryError] = useState('');
+
+  useEffect(() => {
+    api
+      .get('/reports/summary')
+      .then((res) => setSummary(res.data))
+      .catch((err) => setSummaryError(errorMessage(err, 'Could not load the figures')));
+  }, []);
+
+  const visibleKpis = kpis(summary).filter((kpi) => can(kpi.permission));
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
@@ -89,32 +126,51 @@ export default function Dashboard() {
         </Box>
       </Box>
 
+      {summaryError && <Alert severity="error" sx={{ mb: 2 }}>{summaryError}</Alert>}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        {visibleKpis.map(({ label, value, icon: Icon, color }) => (
-          <Grid size={{ xs: 12, sm: 6, lg: 12 / visibleKpis.length }} key={label}>
-            <Card>
-              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Box
-                  sx={{
-                    width: 48, height: 48, borderRadius: 2, display: 'grid', placeItems: 'center',
-                    bgcolor: `${color}1a`, color,
-                  }}
-                >
-                  <Icon />
-                </Box>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">{label}</Typography>
-                  <Typography variant="h5" fontWeight={700}>{value}</Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
+        {visibleKpis.map(({ label, value, hint, to, icon: Icon, color }) => {
+          const content = (
+            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box
+                sx={{
+                  width: 48, height: 48, borderRadius: 2, display: 'grid', placeItems: 'center', flexShrink: 0,
+                  bgcolor: `${color}1a`, color,
+                }}
+              >
+                <Icon />
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="body2" color="text.secondary">{label}</Typography>
+                <Typography variant="h5" fontWeight={700}>
+                  {value ?? (summaryError ? '—' : <Skeleton width={90} />)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">{hint}</Typography>
+              </Box>
+            </CardContent>
+          );
+          return (
+            <Grid size={{ xs: 12, sm: 6, lg: 12 / visibleKpis.length }} key={label}>
+              <Card sx={{ height: '100%' }}>
+                {to ? <CardActionArea component={RouterLink} to={to} sx={{ height: '100%' }}>{content}</CardActionArea> : content}
+              </Card>
+            </Grid>
+          );
+        })}
       </Grid>
 
-      <Box sx={{ mb: 3 }}>
-        <SystemStatus />
-      </Box>
+      {can('reports.view') ? (
+        <Suspense fallback={<Skeleton variant="rounded" height={420} sx={{ mb: 3 }} />}>
+          <DashboardCharts lowStock={<LowStockTable />} />
+        </Suspense>
+      ) : (
+        can('stock.view') && <Box sx={{ mb: 3 }}><LowStockTable /></Box>
+      )}
+
+      {can('settings.manage') && (
+        <Box sx={{ mb: 3 }}>
+          <SystemStatus />
+        </Box>
+      )}
 
       <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
         Modules

@@ -21,6 +21,7 @@ import ProductDialog from './ProductDialog';
 import ImportDialog from './ImportDialog';
 import DeleteProductDialog from './DeleteProductDialog';
 import AuditHistory from '../../components/AuditHistory';
+import useLastValue from '../../lib/useLastValue';
 
 const PAGE_SIZE = 50;
 const COLUMNS_PREF = 'products.grid.columns';
@@ -56,6 +57,7 @@ export default function ProductsGrid({ options }) {
   const [urlParams] = useSearchParams();
   const initialSearch = urlParams.get('search') ?? '';
   const [historyProduct, setHistoryProduct] = useState(null);
+  const historyShown = useLastValue(historyProduct);
   const gridRef = useRef(null);
   const [total, setTotal] = useState(null);
   const [filters, setFilters] = useState({ search: initialSearch, categoryId: '', status: 'all', lowStock: false });
@@ -365,16 +367,16 @@ export default function ProductsGrid({ options }) {
       />
       <Drawer anchor="right" open={Boolean(historyProduct)} onClose={() => setHistoryProduct(null)}
         PaperProps={{ sx: { width: { xs: '100%', sm: 560 }, p: 3 } }}>
-        {historyProduct && (
+        {historyShown && (
           <>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                <Typography sx={{ fontFamily: 'monospace', fontSize: 13 }}>{historyProduct.sku}</Typography>
-                <Typography color="text.secondary" noWrap>{historyProduct.name}</Typography>
+                <Typography sx={{ fontFamily: 'monospace', fontSize: 13 }}>{historyShown.sku}</Typography>
+                <Typography color="text.secondary" noWrap>{historyShown.name}</Typography>
               </Box>
               <IconButton onClick={() => setHistoryProduct(null)} aria-label="Close"><CloseIcon /></IconButton>
             </Box>
-            <AuditHistory entity="product" entityId={historyProduct.id} card={false} />
+            <AuditHistory entity="product" entityId={historyShown.id} card={false} />
           </>
         )}
       </Drawer>

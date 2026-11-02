@@ -3,10 +3,12 @@ import {
   Alert, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
 } from '@mui/material';
 import api, { errorMessage } from '../../lib/api';
+import useLastValue from '../../lib/useLastValue';
 
 // Confirms deleting a product. The server only deletes products that were never used;
 // for one with history it explains why and offers to set it inactive instead.
 export default function DeleteProductDialog({ product, onClose, onDeleted, onDeactivated, onError }) {
+  const shown = useLastValue(product);
   const [blocked, setBlocked] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -47,7 +49,7 @@ export default function DeleteProductDialog({ product, onClose, onDeleted, onDea
           <Alert severity="warning">{blocked}</Alert>
         ) : (
           <DialogContentText>
-            <b>{product?.sku}</b> – {product?.name} will be deleted. This cannot be undone.
+            <b>{shown?.sku}</b> – {shown?.name} will be deleted. This cannot be undone.
           </DialogContentText>
         )}
       </DialogContent>

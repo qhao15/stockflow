@@ -36,7 +36,11 @@ export default function ProductDialog({ open, product, options, onClose, onSaved
   const [errors, setErrors] = useState({});
   const [message, setMessage] = useState(null);
   const [saving, setSaving] = useState(false);
-  const isEdit = Boolean(product);
+  // The parent clears `product` as soon as it closes the dialog, but the dialog still fades
+  // out for a moment; keep the last one so the title and button don't flip to "Add product".
+  const [shown, setShown] = useState(product);
+  if (open && product !== shown) setShown(product);
+  const isEdit = Boolean(shown);
 
   useEffect(() => {
     if (!open) return;
@@ -56,7 +60,7 @@ export default function ProductDialog({ open, product, options, onClose, onSaved
     const body = { ...form, brand: form.brand.trim() };
     try {
       const res = isEdit
-        ? await api.patch(`/products/${product.id}`, { ...body, version })
+        ? await api.patch(`/products/${shown.id}`, { ...body, version })
         : await api.post('/products', body);
       onSaved(res.data.product, isEdit);
     } catch (err) {
@@ -80,7 +84,7 @@ export default function ProductDialog({ open, product, options, onClose, onSaved
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="md" fullWidth>
       <form onSubmit={submit} noValidate>
-        <DialogTitle>{isEdit ? `Edit ${product.sku}` : 'Add product'}</DialogTitle>
+        <DialogTitle>{isEdit ? `Edit ${shown.sku}` : 'Add product'}</DialogTitle>
         <DialogContent dividers>
           {message && <Alert severity={message.severity} sx={{ mb: 2 }}>{message.text}</Alert>}
           <Grid container spacing={2}>
