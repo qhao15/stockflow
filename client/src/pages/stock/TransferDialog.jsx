@@ -3,26 +3,28 @@ import {
   Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography,
 } from '@mui/material';
 import api, { errorMessage } from '../../lib/api';
+import useLastValue from '../../lib/useLastValue';
 
 const available = (product, warehouseId) => product?.quantities[warehouseId] ?? 0;
 
 // Moves units of one product between two warehouses. The server re-checks the quantity
 // under a row lock, so two people moving the same units can't both succeed.
-export default function TransferDialog({ product, warehouses, onClose, onDone, onError }) {
+export default function TransferDialog({ product: selected, warehouses, onClose, onDone, onError }) {
+  const product = useLastValue(selected);
   const [form, setForm] = useState({ fromWarehouseId: '', toWarehouseId: '', quantity: '', note: '' });
   const [saving, setSaving] = useState(false);
 
   // Default to moving from the warehouse with the most stock to the one with the least.
   useEffect(() => {
-    if (!product) return;
-    const byStock = [...warehouses].sort((a, b) => available(product, b.id) - available(product, a.id));
+    if (!selected) return;
+    const byStock = [...warehouses].sort((a, b) => available(selected, b.id) - available(selected, a.id));
     setForm({
       fromWarehouseId: byStock[0]?.id ?? '',
       toWarehouseId: byStock[byStock.length - 1]?.id ?? '',
       quantity: '',
       note: '',
     });
-  }, [product, warehouses]);
+  }, [selected, warehouses]);
 
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
@@ -49,7 +51,7 @@ export default function TransferDialog({ product, warehouses, onClose, onDone, o
   const warehouseLabel = (w) => `${w.name} (${available(product, w.id).toLocaleString()} in stock)`;
 
   return (
-    <Dialog open={Boolean(product)} onClose={saving ? undefined : onClose} maxWidth="xs" fullWidth>
+    <Dialog open={Boolean(selected)} onClose={saving ? undefined : onClose} maxWidth="xs" fullWidth>
       <form onSubmit={submit}>
         <DialogTitle>Transfer stock</DialogTitle>
         <DialogContent>

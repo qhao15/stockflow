@@ -4,6 +4,7 @@ import {
 } from '@mui/material';
 import Grid from '@mui/material/Grid2';
 import api, { errorMessage } from '../lib/api';
+import useLastValue from '../lib/useLastValue';
 
 const EMPTY = { name: '', contactName: '', email: '', phone: '', city: '', address: '', notes: '' };
 
@@ -18,11 +19,7 @@ const KINDS = {
 // ("+ New customer"). initialName pre-fills the name, e.g. with what was typed.
 export default function ContactDialog({ kind = 'customer', contact, initialName = '', onClose, onSaved }) {
   const { path, key, noun, nameLabel } = KINDS[kind];
-  // The parent clears `contact` as soon as it closes the dialog, but the dialog still
-  // fades out for a moment; keep the last one so the title and button don't flip to
-  // "New ..." / "Add ..." during the fade.
-  const [shown, setShown] = useState(contact);
-  if (contact && contact !== shown) setShown(contact);
+  const shown = useLastValue(contact);
   const isEdit = Boolean(shown?.id);
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState('');

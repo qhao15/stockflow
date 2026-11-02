@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AgGridReact } from 'ag-grid-react';
 import {
   Alert, Box, FormControlLabel, IconButton, InputAdornment, MenuItem, Snackbar, Switch, TextField, Tooltip, Typography,
@@ -29,7 +30,9 @@ export default function StockGrid({ options }) {
   const gridRef = useRef(null);
   const [total, setTotal] = useState(null);
   const [search, setSearch] = useState('');
-  const [filters, setFilters] = useState({ search: '', categoryId: '', warehouseId: '', lowStock: false });
+  // /stock?lowStock=1 opens with the filter on (the dashboard links here).
+  const [urlParams] = useSearchParams();
+  const [filters, setFilters] = useState({ search: '', categoryId: '', warehouseId: '', lowStock: urlParams.get('lowStock') === '1' });
   const [toast, setToast] = useState(null);
   const [history, setHistory] = useState(null);
   const [transferring, setTransferring] = useState(null);

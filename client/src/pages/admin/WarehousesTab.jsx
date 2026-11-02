@@ -8,10 +8,12 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import api, { errorMessage } from '../../lib/api';
+import useLastValue from '../../lib/useLastValue';
 
 // On failure the dialog stays open so the input can be fixed; the error is shown by onError.
 function WarehouseDialog({ warehouse, onClose, onSaved, onError }) {
-  const isEdit = Boolean(warehouse?.id);
+  const shown = useLastValue(warehouse);
+  const isEdit = Boolean(shown?.id);
   const [form, setForm] = useState({ code: '', name: '', city: '', address: '' });
   const [saving, setSaving] = useState(false);
 
@@ -27,7 +29,7 @@ function WarehouseDialog({ warehouse, onClose, onSaved, onError }) {
     setSaving(true);
     try {
       const res = isEdit
-        ? await api.patch(`/warehouses/${warehouse.id}`, form)
+        ? await api.patch(`/warehouses/${shown.id}`, form)
         : await api.post('/warehouses', form);
       onSaved(res.data.warehouse, isEdit);
     } catch (err) {
@@ -71,6 +73,7 @@ export default function WarehousesTab() {
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null); // {} = new, warehouse = edit
   const [deleting, setDeleting] = useState(null);
+  const deletingShown = useLastValue(deleting);
   const [savingId, setSavingId] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -185,7 +188,7 @@ export default function WarehousesTab() {
       <Dialog open={Boolean(deleting)} onClose={() => setDeleting(null)}>
         <DialogTitle>Delete warehouse?</DialogTitle>
         <DialogContent>
-          <DialogContentText>"{deleting?.name}" will be deleted. This cannot be undone.</DialogContentText>
+          <DialogContentText>"{deletingShown?.name}" will be deleted. This cannot be undone.</DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleting(null)}>Cancel</Button>

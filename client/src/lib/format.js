@@ -1,3 +1,5 @@
+export const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
 // Dates for display, in the viewer's locale.
 
 // 'YYYY-MM-DD' (a date without time) is shown as that calendar day in any time zone.

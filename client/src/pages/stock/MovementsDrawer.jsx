@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import api, { errorMessage } from '../../lib/api';
+import useLastValue from '../../lib/useLastValue';
 
 const PAGE_SIZE = 50;
 
@@ -30,7 +31,8 @@ function Reference({ movement: m }) {
 
 // The ledger for one product, newest first. Each row is one change to one warehouse's
 // stock, with what caused it.
-export default function MovementsDrawer({ product, warehouses, onClose }) {
+export default function MovementsDrawer({ product: selected, warehouses, onClose }) {
+  const product = useLastValue(selected);
   const [warehouseId, setWarehouseId] = useState('');
   const [rows, setRows] = useState(null);
   const [total, setTotal] = useState(0);
@@ -39,12 +41,12 @@ export default function MovementsDrawer({ product, warehouses, onClose }) {
 
   // Start over when another product (or warehouse) is picked.
   useEffect(() => {
-    if (!product) return;
+    if (!selected) return;
     let cancelled = false;
     setRows(null);
     setError('');
     api
-      .get('/stock/movements', { params: { productId: product.id, warehouseId: warehouseId || undefined, limit: PAGE_SIZE } })
+      .get('/stock/movements', { params: { productId: selected.id, warehouseId: warehouseId || undefined, limit: PAGE_SIZE } })
       .then((res) => {
         if (cancelled) return;
         setRows(res.data.rows);
@@ -52,7 +54,7 @@ export default function MovementsDrawer({ product, warehouses, onClose }) {
       })
       .catch((err) => !cancelled && setError(errorMessage(err, 'Could not load the movement history')));
     return () => { cancelled = true; };
-  }, [product, warehouseId]);
+  }, [selected, warehouseId]);
 
   const loadMore = async () => {
     setLoading(true);
@@ -75,7 +77,7 @@ export default function MovementsDrawer({ product, warehouses, onClose }) {
   };
 
   return (
-    <Drawer anchor="right" open={Boolean(product)} onClose={close} PaperProps={{ sx: { width: { xs: '100%', md: 760 } } }}>
+    <Drawer anchor="right" open={Boolean(selected)} onClose={close} PaperProps={{ sx: { width: { xs: '100%', md: 760 } } }}>
       {product && (
         <Box sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 2 }}>

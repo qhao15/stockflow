@@ -51,7 +51,11 @@ const ROUTES = [
   ['suppliers.view', 'GET', '/suppliers'],
   ['suppliers.manage', 'POST', '/suppliers', {}],
   ['users.manage', 'GET', '/users'],
+  ['settings.manage', 'GET', '/health/details'],
   ['audit_log.view', 'GET', '/audit-logs?limit=1'],
+  ['reports.view', 'GET', '/reports/revenue'],
+  ['reports.view', 'GET', '/reports/top-products'],
+  ['stock.view', 'GET', '/reports/low-stock?limit=1'],
 ];
 
 const tag = newTag('P');

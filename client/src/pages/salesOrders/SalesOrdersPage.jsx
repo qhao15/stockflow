@@ -17,6 +17,7 @@ const center = { textAlign: 'center', justifyContent: 'center' };
 
 export default function SalesOrdersPage() {
   const { can } = useAuth();
+  const canOpenCustomer = can('customers.view');
   const navigate = useNavigate();
   const [warehouses, setWarehouses] = useState([]);
   const [total, setTotal] = useState(null);
@@ -72,7 +73,13 @@ export default function SalesOrdersPage() {
         </Link>
       ),
     },
-    { colId: 'customer', headerName: 'Customer', flex: 1, minWidth: 220, valueGetter: ({ data }) => data?.customer.name },
+    {
+      colId: 'customer', headerName: 'Customer', flex: 1, minWidth: 220,
+      valueGetter: ({ data }) => data?.customer.name,
+      cellRenderer: ({ data, value }) => (data && canOpenCustomer ? (
+        <Link component={RouterLink} to={`/customers/${data.customer.id}`} underline="hover">{value}</Link>
+      ) : value),
+    },
     { colId: 'warehouse', headerName: 'Warehouse', width: 110, minWidth: 110, cellStyle: center, headerClass: 'header-center', valueGetter: ({ data }) => data?.warehouse.code },
     { colId: 'items', headerName: 'Lines', width: 80, minWidth: 80, sortable: false, cellStyle: center, headerClass: 'header-center', valueGetter: ({ data }) => data?.itemCount },
     { colId: 'totalAmount', field: 'totalAmount', headerName: 'Total', width: 130, minWidth: 130, cellStyle: center, headerClass: 'header-center', valueFormatter: ({ value }) => (value == null ? '' : money.format(value)) },
@@ -82,7 +89,7 @@ export default function SalesOrdersPage() {
       cellRenderer: ({ value }) => value && <StatusChip status={value} />,
     },
     { colId: 'createdBy', headerName: 'Sold by', width: 120, minWidth: 120, cellStyle: center, headerClass: 'header-center', sortable: false, valueGetter: ({ data }) => data?.createdBy?.name },
-  ], []);
+  ], [canOpenCustomer]);
 
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true }), []);
   const setFilter = (field) => (e) => setFilters((prev) => ({ ...prev, [field]: e.target.value }));

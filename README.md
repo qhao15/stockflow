@@ -14,13 +14,13 @@
 
 StockFlow tracks products across multiple warehouses, handles purchase orders from suppliers and sales orders to customers, and keeps every stock change traceable through a movement ledger instead of a single editable number.
 
-> **Status:** in active development, version **0.2.0**. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, purchase orders, sales orders with PDF invoices, customers and suppliers, and the audit log are done; dashboard charts and reports are being built step by step (see [Roadmap](#roadmap)).
+> **Status:** in active development, version **0.3.0**. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, purchase orders, sales orders with PDF invoices, customers and suppliers, the audit log, and dashboard charts and reports are done (see [Roadmap](#roadmap)).
 
 ## Tech stack
 
 | Layer    | Technology                                             |
 | -------- | ------------------------------------------------------ |
-| Frontend | React 18, Vite, Material UI (MUI), AG Grid Community, React Router, Axios |
+| Frontend | React 18, Vite, Material UI (MUI), AG Grid Community, Recharts, React Router, Axios |
 | Backend  | Node.js, Express, ExcelJS (Excel import/export), PDFKit (PDF invoices), Multer (file uploads), express-rate-limit |
 | Database | MySQL 8 / MariaDB 10.4+ (via `mysql2`)                 |
 | Auth     | JSON Web Tokens (`jsonwebtoken`), `bcryptjs` password hashing |
@@ -35,8 +35,11 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
 - **Role-based access**: each module and action requires a permission (see [Roles and permissions](#roles-and-permissions)). The API refuses requests without it, and the sidebar, dashboard and routes only show what the user's role allows.
 - **User management** (Admin): list users, change roles, deactivate and reactivate accounts. Changes take effect on the user's next request.
 - **Account settings** (every user, from the avatar menu): change your own name, email and password. Changing the password requires the current one and signs out all other devices.
-- **App layout**: responsive sidebar that collapses to icons only (the choice is remembered), account menu with role and logout, mobile drawer.
-- **Dashboard shell**: KPI cards and a live API/database status check.
+- **App layout**: responsive sidebar that collapses to icons only (the choice is remembered), account menu with role and logout (asks to confirm first), mobile drawer.
+- **Dashboard** (see [Reports and performance](#reports-and-performance)):
+  - KPI cards with real figures: revenue against the same days of last month (Managers and Admins), orders, active products and low-stock products.
+  - Revenue and gross profit chart with a day/month toggle, date range and a table view; top products by quantity or revenue; low-stock table.
+  - Staff see the counts and low stock, but no revenue or profit. Admins also get a system status card with the API and database state.
 - **Database schema and demo data**: all core tables, plus a seed script that simulates a year of business for a fictional electronics and computer accessories distributor (see [Demo data](#demo-data)).
 - **Products and categories** (see [Products module](#products-module)):
   - Product list in AG Grid. Paging, sorting, search and filters (category, status, low stock) all run on the server.
@@ -57,7 +60,7 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
   - Receiving adds every line to the warehouse's stock in one transaction.
 - **Sales orders and PDF invoices** (see [Sales orders module](#sales-orders-module)):
   - List with status chips and filters (status, warehouse, date range, order number or customer search).
-  - New-order form with customer and product search, the quantity available in the chosen warehouse on every line, an optional discount and live totals.
+  - New-order form with customer and product search, an optional discount and live totals. Available stock shows in the product search and on every line: for the chosen warehouse, or per warehouse until one is picked.
   - Detail page with a Download invoice button (everyone) and Cancel (Managers and Admins), which returns the stock.
 - **Customers** (Staff, Managers and Admins):
   - List with search (name, code, contact, phone, email), city and status filters, and orders, revenue and last order per customer, sortable to find the best customers.
@@ -71,10 +74,6 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
   - List with received POs, spend, open POs and last PO per supplier.
   - Detail page with contact details, totals (spend, average PO, open POs and their value) and the purchase order history, plus "New purchase order" with the supplier already picked.
   - Same add, edit, deactivate and delete rules as customers.
-
-### Planned
-
-- **Dashboard charts**: revenue by day/month, top-selling products, low-stock list
 
 ### Stock traceability
 
@@ -99,7 +98,7 @@ Design rules:
 - **`stock` always equals the sum of its movements.** The quantity and its movement row are written in the same transaction. The seed script verifies this after every run.
 - **Database constraints are the last line of defence.** Even if application code has a bug, `CHECK` constraints stop negative stock and zero-quantity order lines.
 - **Money uses `DECIMAL`, never floats.**
-- **Indexes:** the schema starts with only primary, unique and foreign-key indexes. Reporting indexes are added in the performance step and measured before and after on the large seed.
+- **Indexes:** beyond primary, unique and foreign-key indexes, one reporting index is added, `sales_orders(status, order_date)`, chosen by measuring on the large seed (see [Reports and performance](#reports-and-performance)).
 
 ## Demo data
 
@@ -195,6 +194,44 @@ Product brands are real; suppliers, customers and people are fictional. SKUs fol
 - **Admin only**, both the Audit Log page and the History sections. The demo data is loaded directly by the seed, so the log starts empty and fills as the app is used.
 - **Tests** ([`server/tests/audit.test.js`](server/tests/audit.test.js)): one row per committed change with only the changed fields; no row for a rolled-back change, an outdated edit or an oversold order; no password or hash ever stored; orders, stock moves and role changes logged with their details; filters; non-admins get `403`.
 
+## Reports and performance
+
+- **What counts.** Cancelled orders are left out of every figure. Revenue is the order total after discount; gross profit subtracts the unit cost copied onto each line at the time of sale, so later price changes don't rewrite past profit. Totals are added up in cents.
+- **No gaps.** Days or months without sales appear as 0, so the chart's time axis stays true.
+- **A fair comparison.** This month's revenue is compared with the same days of last month, because a month in progress is never a fair match for a whole one.
+- **Permissions on the server.** `/api/reports/summary` leaves the revenue fields out for roles without `reports.view`, and the revenue reports answer `403`. Hiding the chart is not the protection.
+
+### Measuring the index
+
+Measured with [`server/scripts/measure-reports.js`](server/scripts/measure-reports.js) on a separate database with 99,999 orders, 225,803 order lines and 50,000 products, on MariaDB 10.4. Each figure is the median of 3 runs, with the index dropped and then added back on the same data.
+
+**The buffer pool was XAMPP's default 16 MB against a 134 MB database**, so many reads go to disk. Timings varied noticeably between rounds, so treat these as rough, not as a benchmark of what a properly configured server would do.
+
+| Report | Without index | With `(status, order_date)` |
+| ------ | ------------- | ---------------------------- |
+| Revenue per day, 30 days | 356 ms | 89 ms |
+| Top products, 30 days | 6,008 ms | 2,359 ms |
+| Top products, 90 days | 2,620 ms | 1,126 ms |
+| Revenue per month, 1 year | 2,024 ms | 2,257 ms |
+| Top products, 1 year | 7,827 ms | 16,892 ms |
+| Summary (KPI cards) | 1,144 ms | 971 ms |
+| Low stock | 1,632 ms | 1,672 ms |
+
+`EXPLAIN` shows the change directly: a 30-day report went from `type=ALL` over about 99,000 orders to `type=range` over about 9,300.
+
+What this shows:
+
+- **Short ranges benefit,** which is what the dashboard asks for: it offers 7, 30 and 90 days for top products and defaults to 30 days for revenue.
+- **The index is not a free win.** A full year covers nearly all orders, so a date filter can't skip much, and top products over a year was no better (one round measured 28 s without the index and 3.7 s with it, another 7.8 s and 16.9 s, so the cache dominates). The dashboard doesn't offer that range for top products.
+- **Summary and low stock are unaffected,** as expected: they don't filter orders by date. The time goes on checking 50,000 products against their stock.
+
+To repeat it:
+
+```bash
+DB_NAME=stockflow_perf npm run seed --prefix server -- --products 50000 --orders 100000 --force
+DB_NAME=stockflow_perf npm run measure-reports --prefix server
+```
+
 ## Roles and permissions
 
 Routes check **permissions**, not role names. The mapping from role to permissions lives in one file, [`server/src/auth/permissions.js`](server/src/auth/permissions.js), so changing what a role can do is a one-line change. `/api/auth/me` returns the user's permission list, and the client uses it only to decide what to show. Every API request is checked again on the server, so hiding a button is never the only protection.
@@ -220,6 +257,7 @@ Admins can't demote or deactivate themselves, so the system always keeps at leas
 - Login answers "Invalid email or password" for both unknown emails and wrong passwords, so it can't be used to find out which emails have accounts.
 - `requirePermission('purchase_orders.approve')` middleware protects routes. It reads the role from the freshly loaded user, not from the token.
 - Changing or resetting a password records `password_changed_at`. Tokens issued before that moment are refused, so a stolen or forgotten session stops working, while the tab that made the change gets a fresh token.
+- The public health check says only whether the API and database are up. Database name, version and error text aren't exposed: details need Admin, and errors go to the server log.
 - Post-login redirects only accept same-site paths, so a crafted `?redirect=` link can't send users to another website.
 - **Rate limiting** ([`server/src/auth/rateLimit.js`](server/src/auth/rateLimit.js)): 10 failed login or register attempts per IP in 15 minutes, which slows down password guessing (successful logins don't count), and 300 requests per minute for the rest of the API. Over the limit the API answers `429` with a message the client shows.
 
@@ -240,6 +278,7 @@ stockflow/
 │       │   ├── admin/          # Users & Settings page, warehouses tab
 │       │   ├── auditLog/       # Audit Log page with filters and before/after rows
 │       │   ├── customers/      # Customer list and detail page with totals and order history
+│       │   ├── dashboard/      # Revenue and top-products charts, low-stock table
 │       │   ├── suppliers/      # Supplier list and detail page with spend, open POs and PO history
 │       │   ├── products/       # Product grid, product/import dialogs, categories tab
 │       │   ├── purchaseOrders/ # PO list, draft form, detail page with status actions
@@ -253,12 +292,13 @@ stockflow/
 │   ├── scripts/
 │   │   ├── create-user.js      # Create an account with a given role from the CLI
 │   │   ├── seed.js             # Simulate a year of business as demo data
-│   │   └── seed-data.js        # Product catalog, suppliers, warehouses, demo accounts
+│   │   ├── seed-data.js        # Product catalog, suppliers, warehouses, demo accounts
+│   │   └── measure-reports.js  # Times the reports and prints EXPLAIN, for the large seed
 │   ├── src/
 │   │   ├── auth/               # permissions.js (role -> permission matrix), middleware.js (JWT + permission checks)
 │   │   ├── db/                 # pool.js (MySQL pool + auto-create database), schema.js (tables, created on startup)
-│   │   ├── routes/             # API routes (health, auth, users, account, categories, products, warehouses, stock, suppliers, customers, purchase and sales orders, audit logs)
-│   │   ├── services/           # Product, stock and order logic, stock ledger (changeStock, transfers, adjustments), audit log, Excel, PDF invoices
+│   │   ├── routes/             # API routes (health, auth, users, account, categories, products, warehouses, stock, suppliers, customers, purchase and sales orders, audit logs, reports)
+│   │   ├── services/           # Product, stock and order logic, stock ledger (changeStock, transfers, adjustments), audit log, reports, Excel, PDF invoices
 │   │   ├── validators/         # common.js (email/password, cancel reason), product.js (shared by the API and the import), stock.js, orders, contact.js
 │   │   ├── app.js              # Express app: middleware and routes (tests start their own copy)
 │   │   └── index.js            # Entry point: checks .env, prepares the database, starts the server
@@ -351,7 +391,8 @@ Passwords must be at least 8 characters. This is also the way to reset a forgott
 
 | Method | Endpoint             | Auth | Description                                                         |
 | ------ | -------------------- | ---- | ------------------------------------------------------------------- |
-| GET    | `/api/health`        | –    | API status and database connection                                  |
+| GET    | `/api/health`        | –    | Whether the API and database are up (`503` if the database isn't); no names, versions or error text |
+| GET    | `/api/health/details` | `settings.manage` | Database name and version, for the Admin's status card |
 | POST   | `/api/auth/register` | –    | Create an account and sign in (first account becomes Admin, later ones Staff) |
 | POST   | `/api/auth/login`    | –    | Sign in; returns `{ token, user }`                                  |
 | GET    | `/api/auth/me`       | JWT  | The current user, including their `permissions`                    |
@@ -409,6 +450,10 @@ Passwords must be at least 8 characters. This is also the way to reset a forgott
 | POST   | `/api/sales-orders/:id/cancel` | `sales_orders.cancel` | Cancel with a required `reason`; returns the stock |
 | GET    | `/api/audit-logs`    | `audit_log.view` | Newest first: `offset`, `limit`, `userId`, `entity`, `entityId` (one record's history), `action`, `from`, `to`, `search` (record label) |
 | GET    | `/api/audit-logs/options` | `audit_log.view` | Record types, actions and users for the filters |
+| GET    | `/api/reports/summary` | JWT | KPI figures; revenue fields only with `reports.view` |
+| GET    | `/api/reports/revenue` | `reports.view` | Revenue, gross profit and orders per period: `group` (`day` or `month`), `from`, `to` |
+| GET    | `/api/reports/top-products` | `reports.view` | Best sellers: `by` (`quantity` or `revenue`), `from`, `to`, `limit` |
+| GET    | `/api/reports/low-stock` | `stock.view` | Products at or below their minimum, per warehouse: `offset`, `limit` |
 
 Missing or expired token → `401`; valid token without the permission → `403`.
 
@@ -429,7 +474,9 @@ The tests run against the database in `server/.env`. Each file creates its own t
 | `permissions.test.js` | Each role has exactly the permissions in the table above, and every route answers `403` exactly when it should; admins can't demote themselves |
 | `customers.test.js` | Generated codes; validation; search; totals leave out cancelled orders; a customer with orders can only be deactivated |
 | `audit.test.js` | One audit row per committed change, with only the changed fields; none for a rolled-back change; no password or hash ever stored; orders, stock moves and role changes logged with details; filters; Admin only |
+| `reports.test.js` | Revenue and profit per day and month with exact cents; cancelled orders left out; empty days as 0; top products; low stock; Staff never get revenue |
 | `suppliers.test.js` | Spend counts received POs, open POs are separate, cancelled count for neither; delete vs deactivate; a new PO for an inactive supplier is refused; Staff get `403` |
+| `health.test.js` | The public check reveals only up or down; a database failure's error text never reaches a response; name and version are Admin only |
 | `account.test.js` | Profile changes keep emails unique and can't change the role; preferences are per user |
 | `products.test.js` | Validation; optimistic locking (`409` instead of overwriting); `%` and `_` in search are literal and unknown sort columns are ignored; delete rules; all-or-nothing Excel import; export → edit → import |
 | `stock.test.js` | Concurrent transfers of the last units; opposite transfers without deadlock; rollback half-way; no negative stock; stale adjustments refused |
@@ -442,7 +489,7 @@ The tests run against the database in `server/.env`. Each file creates its own t
 - **Branches and pull requests:** `main` is protected. Work happens on a branch (e.g. `feature/sales-orders`) and is merged through a pull request; `Closes #N` in the PR closes the issue and moves its card to Done.
 - **CI ([GitHub Actions](.github/workflows/ci.yml)):** every push and pull request runs two checks, and both must pass before merging:
   - **Client build:** installs the client with `npm ci` and builds it.
-  - **Server checks:** syntax-checks every server file, runs the stock, purchase and sales order tests (including concurrent transfers, receipts and sales of the last unit) against MySQL, then starts the API against a fresh MySQL 8 database and checks that `/api/health` reports it connected, which also proves the schema can be created from scratch.
+  - **Server checks:** syntax-checks every server file, runs all the [tests](#tests) (including concurrent transfers, receipts and sales of the last unit) against MySQL, then starts the API against a fresh MySQL 8 database and checks that `/api/health` reports it connected, which also proves the schema can be created from scratch.
 - **Dependencies:** [Dependabot](.github/dependabot.yml) opens monthly PRs with minor and patch updates, grouped so packages that must match (React, MUI, AG Grid, Vite) move together. Major versions are upgraded by hand on a branch, with testing. Security fixes arrive as soon as a vulnerability is published.
 - **Security:** CodeQL scans the code on every push, and secret scanning with push protection blocks commits that contain credentials. See [SECURITY.md](SECURITY.md) to report a vulnerability.
 - **Releases:** each finished milestone is tagged as a [release](https://github.com/qhao15/stockflow/releases) using semantic versioning (`v0.1.0`, `v0.2.0`, …), with notes on what it includes.
@@ -466,7 +513,7 @@ Progress is tracked on the [project board](https://github.com/users/qhao15/proje
 - [x] Sales orders and PDF invoices ([#8](https://github.com/qhao15/stockflow/issues/8))
 - [x] Customers and suppliers ([#9](https://github.com/qhao15/stockflow/issues/9))
 
-**[v0.3 Reports & audit](https://github.com/qhao15/stockflow/milestone/3)**
+**[v0.3 Reports & audit](https://github.com/qhao15/stockflow/milestone/3)** · released as [v0.3.0](https://github.com/qhao15/stockflow/releases/tag/v0.3.0)
 
-- [ ] Dashboard charts and reports ([#10](https://github.com/qhao15/stockflow/issues/10))
+- [x] Dashboard charts and reports ([#10](https://github.com/qhao15/stockflow/issues/10))
 - [x] Audit log ([#11](https://github.com/qhao15/stockflow/issues/11))
