@@ -75,6 +75,11 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
   - Detail page with contact details, totals (spend, average PO, open POs and their value) and the purchase order history, plus "New purchase order" with the supplier already picked.
   - Same add, edit, deactivate and delete rules as customers.
 
+### Coming soon
+
+- **Chatbot**: a chat assistant inside the app that answers questions about products, stock and orders, limited to what the user's role can already see.
+- **Updating**: more updates are being planned.
+
 ### Stock traceability
 
 Stock is never edited directly. Every change (purchase received, sale, cancellation, transfer, adjustment) writes a row to `stock_movements` with its reason, so the current quantity in `stock` can always be explained and audited.
@@ -517,3 +522,8 @@ Progress is tracked on the [project board](https://github.com/users/qhao15/proje
 
 - [x] Dashboard charts and reports ([#10](https://github.com/qhao15/stockflow/issues/10))
 - [x] Audit log ([#11](https://github.com/qhao15/stockflow/issues/11))
+
+**[v0.4 Chatbot & updates](https://github.com/qhao15/stockflow/milestone/4)** · coming soon
+
+- [ ] Chatbot assistant ([#38](https://github.com/qhao15/stockflow/issues/38))
+- [ ] Updating ([#39](https://github.com/qhao15/stockflow/issues/39))
