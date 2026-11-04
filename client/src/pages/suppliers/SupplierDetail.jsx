@@ -184,11 +184,11 @@ export default function SupplierDetail() {
                   <TableHead>
                     <TableRow>
                       <TableCell>PO number</TableCell>
-                      <TableCell>Order date</TableCell>
+                      <TableCell align="center">Order date</TableCell>
                       <TableCell align="center">Warehouse</TableCell>
                       <TableCell align="center">Lines</TableCell>
-                      <TableCell align="right">Total</TableCell>
-                      <TableCell>Status</TableCell>
+                      <TableCell align="center">Total</TableCell>
+                      <TableCell align="center">Status</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -199,11 +199,11 @@ export default function SupplierDetail() {
                             {po.poNumber}
                           </Link>
                         </TableCell>
-                        <TableCell>{formatDate(po.orderDate)}</TableCell>
+                        <TableCell align="center">{formatDate(po.orderDate)}</TableCell>
                         <TableCell align="center">{po.warehouse.code}</TableCell>
                         <TableCell align="center">{po.itemCount}</TableCell>
                         <TableCell align="right" sx={{ textDecoration: po.status === 'cancelled' ? 'line-through' : 'none' }}>{money.format(po.totalAmount)}</TableCell>
-                        <TableCell><StatusChip status={po.status} /></TableCell>
+                        <TableCell align="center"><StatusChip status={po.status} /></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

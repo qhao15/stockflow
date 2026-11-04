@@ -56,9 +56,9 @@ export default function Users() {
                 <TableRow>
                   <TableCell>Name</TableCell>
                   <TableCell>Email</TableCell>
-                  <TableCell sx={{ width: 180 }}>Role</TableCell>
-                  <TableCell sx={{ width: 100 }}>Active</TableCell>
-                  <TableCell sx={{ width: 140 }}>Joined</TableCell>
+                  <TableCell align="center" sx={{ width: 180 }}>Role</TableCell>
+                  <TableCell align="center" sx={{ width: 100 }}>Active</TableCell>
+                  <TableCell align="center" sx={{ width: 140 }}>Joined</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -72,12 +72,13 @@ export default function Users() {
                         {isMe && <Chip label="You" size="small" sx={{ ml: 1 }} />}
                       </TableCell>
                       <TableCell>{u.email}</TableCell>
-                      <TableCell>
+                      <TableCell align="center">
                         <Tooltip title={isMe ? "You can't change your own role" : ''}>
                           <span>
                             <Select
                               size="small"
                               fullWidth
+                              sx={{ '& .MuiSelect-select': { textAlign: 'center' } }}
                               value={u.role}
                               disabled={isMe || busy}
                               onChange={(e) => update(u.id, { role: e.target.value })}
@@ -95,7 +96,7 @@ export default function Users() {
                           </span>
                         </Tooltip>
                       </TableCell>
-                      <TableCell>
+                      <TableCell align="center">
                         <Tooltip title={isMe ? "You can't deactivate yourself" : ''}>
                           <span>
                             <Switch
@@ -106,7 +107,7 @@ export default function Users() {
                           </span>
                         </Tooltip>
                       </TableCell>
-                      <TableCell>{new Date(u.createdAt).toLocaleDateString()}</TableCell>
+                      <TableCell align="center">{new Date(u.createdAt).toLocaleDateString()}</TableCell>
                     </TableRow>
                   );
                 })}
