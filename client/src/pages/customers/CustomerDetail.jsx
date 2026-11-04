@@ -178,11 +178,11 @@ export default function CustomerDetail() {
                   <TableHead>
                     <TableRow>
                       <TableCell>Order</TableCell>
-                      <TableCell>Date</TableCell>
+                      <TableCell align="center">Date</TableCell>
                       <TableCell align="center">Warehouse</TableCell>
                       <TableCell align="center">Lines</TableCell>
-                      <TableCell align="right">Total</TableCell>
-                      <TableCell>Status</TableCell>
+                      <TableCell align="center">Total</TableCell>
+                      <TableCell align="center">Status</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -193,11 +193,11 @@ export default function CustomerDetail() {
                             {o.orderNumber}
                           </Link>
                         </TableCell>
-                        <TableCell>{formatDateTime(o.orderDate)}</TableCell>
+                        <TableCell align="center">{formatDateTime(o.orderDate)}</TableCell>
                         <TableCell align="center">{o.warehouse.code}</TableCell>
                         <TableCell align="center">{o.itemCount}</TableCell>
                         <TableCell align="right" sx={{ textDecoration: o.status === 'cancelled' ? 'line-through' : 'none' }}>{money.format(o.totalAmount)}</TableCell>
-                        <TableCell><StatusChip status={o.status} /></TableCell>
+                        <TableCell align="center"><StatusChip status={o.status} /></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
