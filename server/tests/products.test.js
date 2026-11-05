@@ -96,6 +96,39 @@ test('search treats % and _ literally, and unknown sort columns are ignored safe
   assert.ok(count > 0, 'the products table is still there');
 });
 
+test('Staff never receive cost prices: not in the list, one product or the export, and no sorting by them', async () => {
+  const staff = await login(api.call, await createUser(tag, 'staff'));
+  const cheap = (await api.call('POST', '/products', { token, body: product({ sku: sku('COST1'), costPrice: '1.00' }) })).body.product;
+  const dear = (await api.call('POST', '/products', { token, body: product({ sku: sku('COST2'), costPrice: '999.00' }) })).body.product;
+  assert.equal(cheap.costPrice, 1, 'Managers do see the cost');
+
+  const search = `search=${encodeURIComponent(sku('COST'))}`;
+  const list = await api.call('GET', `/products?${search}`, { token: staff });
+  assert.ok(list.body.rows.length >= 2, 'the search finds them');
+  assert.ok(list.body.rows.every((p) => !('costPrice' in p)), 'not in the list');
+
+  const one = await api.call('GET', `/products/${cheap.id}`, { token: staff });
+  assert.equal(one.status, 200);
+  assert.ok(!('costPrice' in one.body.product), 'not in one product');
+  assert.equal(one.body.product.salePrice, cheap.salePrice, 'the sale price is still there');
+
+  // Sorting by cost would reveal which is dearer, so it falls back to the default order.
+  const byCost = async (dir, as) => (await api.call('GET', `/products?${search}&sort=costPrice&dir=${dir}`, { token: as })).body.rows.map((p) => p.id);
+  assert.deepEqual(await byCost('asc', staff), await byCost('desc', staff), 'the sort is ignored for Staff');
+  assert.notDeepEqual(await byCost('asc', token), await byCost('desc', token), 'it works for Managers');
+
+  const headers = async (as) => {
+    const file = await api.call('GET', `/products/export?${search}`, { token: as });
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(file.body);
+    return book.getWorksheet('Products').getRow(1).values;
+  };
+  assert.ok(!(await headers(staff)).includes('Cost price'), 'not in the export');
+  assert.ok((await headers(token)).includes('Cost price'), 'Managers do get it in the export');
+
+  await pool.query('DELETE FROM products WHERE id IN (?)', [[cheap.id, dear.id]]);
+});
+
 test('delete: a product with history is kept; one without is deleted', async () => {
   const unused = (await create(product({ sku: sku('DEL1') }))).body.product;
   const used = (await create(product({ sku: sku('DEL2') }))).body.product;

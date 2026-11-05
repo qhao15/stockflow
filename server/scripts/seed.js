@@ -103,7 +103,7 @@ const RESTOCK_TIME = 21 * 60; // low-stock check at the end of each day
 // ---------- master data ----------
 
 async function upsertDemoUsers() {
-  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+  const passwordHash = await bcrypt.hash(seedPassword, 10);
   for (const u of demoUsers) {
     await pool.query(
       `INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)
@@ -546,6 +546,19 @@ async function verify() {
 
 // ---------- main ----------
 
+// The default password is public (it's in this repository), so it's for local databases only:
+// on a hosted one it would let anyone sign in as the demo Admin.
+const seedPassword = process.env.SEED_PASSWORD || DEMO_PASSWORD;
+const isLocalDatabase = ['localhost', '127.0.0.1', '::1'].includes(process.env.DB_HOST);
+if (!isLocalDatabase && !process.env.SEED_PASSWORD) {
+  console.error(`${process.env.DB_HOST} isn't a local database: set SEED_PASSWORD to choose the demo accounts' password.`);
+  process.exit(1);
+}
+if (seedPassword.length < 8) {
+  console.error('SEED_PASSWORD must be at least 8 characters');
+  process.exit(1);
+}
+
 const started = Date.now();
 try {
   await ensureDatabase();
@@ -567,7 +580,7 @@ try {
     console.log(`\nStock matches the movement ledger: ${result.mismatched === 0 ? 'yes' : `NO (${result.mismatched} rows differ)`}`);
     console.log(`Rows pointing to a missing parent: ${result.orphans}`);
     console.log(`Revenue: $${Number(result.revenue).toLocaleString()} | low-stock rows: ${result.low_stock} | purchase orders waiting: ${result.draft_pos} draft, ${result.approved_pos} approved`);
-    console.log(`Demo accounts (password ${DEMO_PASSWORD}): ${demoUsers.map((u) => u.email).join(', ')}`);
+    console.log(`Demo accounts (password ${process.env.SEED_PASSWORD ? 'from SEED_PASSWORD' : DEMO_PASSWORD}): ${demoUsers.map((u) => u.email).join(', ')}`);
     console.log(`Done in ${((Date.now() - started) / 1000).toFixed(1)}s`);
     if (result.mismatched || result.orphans) process.exitCode = 1;
   }

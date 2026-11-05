@@ -32,7 +32,7 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
 
 - **Accounts**: register, sign in and log out. Every page except Login and Register requires an account.
 - **Session handling**: the session is restored on page reload, and an expired token automatically logs the user out and returns them to the page they were on after signing in again. If the server can't be reached, for example while it restarts, the app keeps the login and tries again instead of logging out. Signing in or out in one tab refreshes all other open tabs.
-- **Roles**: Admin, Manager and Staff. The first registered account becomes Admin, later sign-ups become Staff. Accounts with any role can also be created from the command line (see [Creating accounts](#creating-accounts)).
+- **Roles**: Admin, Manager and Staff. The first registered account becomes Admin, later sign-ups become Staff, and `ALLOW_REGISTRATION=false` closes sign-up. Accounts with any role can also be created from the command line (see [Creating accounts](#creating-accounts)).
 - **Role-based access**: each module and action requires a permission (see [Roles and permissions](#roles-and-permissions)). The API refuses requests without it, and the sidebar, dashboard and routes only show what the user's role allows.
 - **User management** (Admin): list users, change roles, deactivate and reactivate accounts. Changes take effect on the user's next request.
 - **Account settings** (every user, from the avatar menu): change your own name, email and password. Changing the password requires the current one and signs out all other devices.
@@ -122,7 +122,7 @@ npm run seed --prefix server -- --force           # replace existing data
 npm run seed --prefix server -- --products 50000 --orders 100000 --force   # large data set for performance testing
 ```
 
-The seed replaces all business data but keeps user accounts. It creates (or resets) these demo accounts, all with the password `demo1234`:
+The seed replaces all business data but keeps user accounts. It creates (or resets) these demo accounts, all with the password `demo1234`. That password is public, so on a non-local database the seed refuses to run unless `SEED_PASSWORD` sets a different one:
 
 | Name         | Email                    | Role    |
 | ------------ | ------------------------ | ------- |
@@ -243,7 +243,7 @@ Routes check **permissions**, not role names. The mapping from role to permissio
 
 | Module            | Staff                  | Manager                              | Admin |
 | ----------------- | ---------------------- | ------------------------------------ | ----- |
-| Products          | view                   | view, manage                         | all   |
+| Products          | view, without cost or margin | view with cost and margin, manage | all   |
 | Stock             | view                   | view, transfer, adjust               | all   |
 | Purchase orders   | –                      | view, create, approve, receive, cancel | all   |
 | Sales orders      | view, create           | view, create, cancel                 | all   |
@@ -357,6 +357,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 | `CLIENT_URL`     | `http://localhost:5173` | Allowed CORS origin                                  |
 | `JWT_SECRET`     | *(required)*            | Secret used to sign login tokens; the server won't start without it |
 | `JWT_EXPIRES_IN` | `1d`                    | How long a login lasts (e.g. `8h`, `7d`)             |
+| `ALLOW_REGISTRATION` | `true`                | `false` closes sign-up, for a public site; accounts then come from `npm run create-user` |
 | `COMPANY_NAME`, `COMPANY_ADDRESS`, `COMPANY_PHONE`, `COMPANY_EMAIL`, `COMPANY_TAX_ID` | fictional | Seller details printed on PDF invoices |
 
 The database and its tables are created automatically the first time the server starts, so no manual SQL is needed.
@@ -400,6 +401,7 @@ Passwords must be at least 8 characters. This is also the way to reset a forgott
 | ------ | -------------------- | ---- | ------------------------------------------------------------------- |
 | GET    | `/api/health`        | –    | Whether the API and database are up (`503` if the database isn't); no names, versions or error text |
 | GET    | `/api/health/details` | `settings.manage` | Database name and version, for the Admin's status card |
+| GET    | `/api/auth/options`  | –    | Whether sign-up is open |
 | POST   | `/api/auth/register` | –    | Create an account and sign in (first account becomes Admin, later ones Staff) |
 | POST   | `/api/auth/login`    | –    | Sign in; returns `{ token, user }`                                  |
 | GET    | `/api/auth/me`       | JWT  | The current user, including their `permissions`                    |
@@ -492,7 +494,7 @@ The tests run against the database in `server/.env`. Each file creates its own t
 
 ### Browser tests
 
-[Playwright](https://playwright.dev) tests in [`e2e/`](e2e/) use the real site in a browser, so they also cover the React pages. They start their own copy of the API and the client on separate ports, so they can run next to `npm run dev`, and use the database in `server/.env`, so MySQL must be running. Run them against a local database only, because they create temporary accounts and data in it (named `E2E`, deleted before and after each run). They run on your own computer and aren't part of CI yet. The 69 tests run one file at a time, each file in its own browser window, which closes when the file is done. Their API raises the request limit (`API_RATE_LIMIT`), because a whole test run comes from one address; the normal limit is unchanged.
+[Playwright](https://playwright.dev) tests in [`e2e/`](e2e/) use the real site in a browser, so they also cover the React pages. They start their own copy of the API and the client on separate ports, so they can run next to `npm run dev`, and use the database in `server/.env`, so MySQL must be running. Run them against a local database only, because they create temporary accounts and data in it (named `E2E`, deleted before and after each run). The 71 tests run one file at a time, each file in its own browser window, which closes when the file is done. Their API raises the request limit (`API_RATE_LIMIT`), because a whole test run comes from one address; the normal limit is unchanged.
 
 ```bash
 npx playwright install chromium   # once, downloads the browser
@@ -504,10 +506,10 @@ npm run test:e2e:ui               # step through the test in Playwright's window
 | File | What it proves |
 | ---- | -------------- |
 | `admin.spec.js` | With two people signed in: a role change reaches a logged-in user without logging them out; a deactivated user is logged out on their next click and can return when reactivated; Admins can't change their own role or deactivate themselves; a role change appears in the Audit Log with who did it and the values before and after; the log's filters narrow an order's entries and its link opens the order |
-| `auth.spec.js` | Sign in and log out; a wrong password shows an error; a protected page asks for login and then returns to that page; the session survives a reload; a new account registers as Staff. |
+| `auth.spec.js` | Sign in and log out; a wrong password shows an error; a protected page asks for login and then returns to that page; the session survives a reload; a new account registers as Staff; with sign-up closed, the pages stop offering it. |
 | `customers-suppliers.spec.js` | For both: add through the form with a generated code, find it in the list, edit it; with no orders it can be deleted, with orders only deactivated. Customer revenue leaves out cancelled orders; supplier spend counts only received orders, with approved ones as open; Staff can add a customer from inside the sales order form, with the typed name filled in; a new purchase order from a supplier page has that supplier picked |
 | `dashboard.spec.js` | KPI cards go up after a sale and open their pages; the revenue chart switches between days and months and between chart and table, with numbers matching the report; a date range filters it, and an impossible one shows an error; top products rank by quantity or revenue over a chosen period; the low-stock table lists a short product and View all opens the filtered stock page; Admins see the API and database status; the greeting follows the time of day |
-| `products.spec.js` | Add a product through the form; form errors show and it stays open; search finds only the match; a price edited in the grid saves and the margin follows; **two tabs: the second save is refused, loads the latest version and overwrites nothing**; export follows the search, and an edited file imports back; a file with one bad row imports nothing; Staff can't change anything |
+| `products.spec.js` | Add a product through the form; form errors show and it stays open; search finds only the match; a price edited in the grid saves and the margin follows; **two tabs: the second save is refused, loads the latest version and overwrites nothing**; export follows the search, and an edited file imports back; a file with one bad row imports nothing; Managers see cost and margin, while Staff see neither on the screen or in the export, and can't change anything |
 | `purchase-orders.spec.js` | Draft, approve and receive through the screens, with stock going up only on receipt; a draft can be edited; cancelling needs a reason and changes no stock; if someone else approved it first, the page refuses and shows the latest status; an approved order can't be opened for editing |
 | `resilience.spec.js` | With faked failures: with the server down the app keeps the login and can try again; it survives a restart by retrying; a 401 logs out and remembers the page; one failed report leaves the rest of the Dashboard working; a slow reply for an old list can't overwrite the count after a search; a failed save keeps what was typed. Also: logging out in one tab logs out the other, and at phone size the sidebar becomes a menu and the page fits the screen |
 | `roles.spec.js` | Each role's sidebar shows exactly its modules; going straight to a blocked address shows No access; Staff see no revenue or profit, the server doesn't send them, and restricted APIs answer `403`; Managers see revenue and suppliers; Admins see system status, the Audit Log and Users |
@@ -518,9 +520,10 @@ npm run test:e2e:ui               # step through the test in Playwright's window
 
 - **Planning:** each roadmap item is a [GitHub issue](https://github.com/qhao15/stockflow/issues) with a task checklist, grouped into milestones and tracked on the [project board](https://github.com/users/qhao15/projects/1).
 - **Branches and pull requests:** `main` is protected. Work happens on a branch (e.g. `feature/sales-orders`) and is merged through a pull request; `Closes #N` in the PR closes the issue and moves its card to Done.
-- **CI ([GitHub Actions](.github/workflows/ci.yml)):** every push and pull request runs two checks, and both must pass before merging:
+- **CI ([GitHub Actions](.github/workflows/ci.yml)):** every push and pull request runs three checks, and all must pass before merging:
   - **Client build:** installs the client with `npm ci` and builds it.
   - **Server checks:** syntax-checks every server file, runs all the [tests](#tests) (including concurrent transfers, receipts and sales of the last unit) against MySQL, then starts the API against a fresh MySQL 8 database and checks that `/api/health` reports it connected, which also proves the schema can be created from scratch.
+  - **Browser tests:** runs all the [browser tests](#browser-tests) in Chromium against a fresh MySQL 8 database, and keeps a trace of any test that fails.
 - **Dependencies:** [Dependabot](.github/dependabot.yml) opens monthly PRs with minor and patch updates, grouped so packages that must match (React, MUI, AG Grid, Vite) move together. Major versions are upgraded by hand on a branch, with testing. Security fixes arrive as soon as a vulnerability is published.
 - **Security:** CodeQL scans the code on every push, and secret scanning with push protection blocks commits that contain credentials. See [SECURITY.md](SECURITY.md) to report a vulnerability.
 - **Releases:** each finished milestone is tagged as a [release](https://github.com/qhao15/stockflow/releases) using semantic versioning (`v0.1.0`, `v0.2.0`, …), with notes on what it includes.

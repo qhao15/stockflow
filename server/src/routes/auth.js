@@ -9,8 +9,17 @@ const router = Router();
 
 router.use(apiLimiter);
 
+// ALLOW_REGISTRATION=false closes sign-up, for a public site. Accounts then come from the
+// create-user script.
+const registrationOpen = () => process.env.ALLOW_REGISTRATION !== 'false';
+
+// GET /api/auth/options - public: lets the login page know whether to offer sign-up.
+router.get('/options', (req, res) => res.json({ registrationOpen: registrationOpen() }));
+
 // POST /api/auth/register - the first account becomes Admin, everyone after is Staff.
 router.post('/register', authLimiter, async (req, res, next) => {
+  if (!registrationOpen()) return res.status(403).json({ message: 'Sign-up is closed' });
+
   const name = String(req.body.name ?? '').trim();
   const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');

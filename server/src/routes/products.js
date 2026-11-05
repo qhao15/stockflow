@@ -24,6 +24,13 @@ const parseId = (value) => {
   return Number.isInteger(id) && id > 0 ? id : null;
 };
 
+const seesCost = (req) => req.user.permissions.includes('products.cost');
+
+// Without products.cost: no cost price in the answer, and no sorting by it, which would reveal
+// the order of the costs.
+const withoutCost = ({ costPrice, ...product }) => product;
+const listQuery = (req) => (seesCost(req) || req.query.sort !== 'costPrice' ? req.query : { ...req.query, sort: undefined });
+
 function sendXlsx(res, buffer, filename) {
   res.setHeader('Content-Type', XLSX_TYPE);
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -49,7 +56,8 @@ router.get('/', canView, async (req, res, next) => {
   const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
   const limit = Math.min(500, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
   try {
-    res.json(await listProducts(req.query, { offset, limit }));
+    const { rows, total } = await listProducts(listQuery(req), { offset, limit });
+    res.json({ rows: seesCost(req) ? rows : rows.map(withoutCost), total });
   } catch (err) {
     next(err);
   }
@@ -58,9 +66,9 @@ router.get('/', canView, async (req, res, next) => {
 // GET /api/products/export - same filters and sort as the list, as an Excel file.
 router.get('/export', canView, async (req, res, next) => {
   try {
-    const { rows } = await listProducts(req.query, { limit: MAX_EXPORT_ROWS });
+    const { rows } = await listProducts(listQuery(req), { limit: MAX_EXPORT_ROWS });
     const date = new Date().toISOString().slice(0, 10);
-    sendXlsx(res, await buildExport(rows), `products-${date}.xlsx`);
+    sendXlsx(res, await buildExport(rows, { includeCost: seesCost(req) }), `products-${date}.xlsx`);
   } catch (err) {
     next(err);
   }
@@ -185,7 +193,7 @@ router.get('/:id', canView, async (req, res, next) => {
   try {
     const product = await getProduct(id);
     if (!product) return res.status(404).json({ message: 'Product not found' });
-    res.json({ product });
+    res.json({ product: seesCost(req) ? product : withoutCost(product) });
   } catch (err) {
     next(err);
   }

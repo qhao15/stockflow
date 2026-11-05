@@ -26,9 +26,12 @@ function styleHeader(sheet) {
   sheet.views = [{ state: 'frozen', ySplit: 1 }];
 }
 
-function addProductSheet(workbook, { markRequired, withStock }) {
+function addProductSheet(workbook, { markRequired, withStock, includeCost = true }) {
   const sheet = workbook.addWorksheet('Products');
-  const columns = [...COLUMNS, ...(withStock ? [{ key: 'stock', header: 'Total stock', width: 12 }] : [])];
+  const columns = [
+    ...COLUMNS.filter((c) => includeCost || c.key !== 'costPrice'),
+    ...(withStock ? [{ key: 'stock', header: 'Total stock', width: 12 }] : []),
+  ];
   sheet.columns = columns.map((c) => ({
     key: c.key,
     header: markRequired && c.required ? `${c.header} *` : c.header,
@@ -63,9 +66,9 @@ export async function buildTemplate(categories) {
   return workbook.xlsx.writeBuffer();
 }
 
-export async function buildExport(products) {
+export async function buildExport(products, { includeCost = true } = {}) {
   const workbook = new ExcelJS.Workbook();
-  const sheet = addProductSheet(workbook, { withStock: true });
+  const sheet = addProductSheet(workbook, { withStock: true, includeCost });
   sheet.addRows(products.map((p) => ({ ...p, category: p.categoryName, isActive: p.isActive ? 'yes' : 'no' })));
   sheet.autoFilter = { from: 'A1', to: { row: 1, column: sheet.columnCount } };
   return workbook.xlsx.writeBuffer();

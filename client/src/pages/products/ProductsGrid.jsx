@@ -53,6 +53,7 @@ export default function ProductsGrid({ options }) {
   const { can } = useAuth();
   const canManage = can('products.manage');
   const canSeeHistory = can('audit_log.view');
+  const canSeeCost = can('products.cost');
   // ?search=<SKU> opens the grid already searched (the audit log links here).
   const [urlParams] = useSearchParams();
   const initialSearch = urlParams.get('search') ?? '';
@@ -182,14 +183,16 @@ export default function ProductsGrid({ options }) {
       { colId: 'category', field: 'categoryName', headerName: 'Category', width: 120, minWidth: 120, cellStyle: { textAlign: 'center', justifyContent: 'center' }, headerClass: 'header-center' },
       { colId: 'brand', field: 'brand', headerName: 'Brand', width: 100, minWidth: 100, cellStyle: { textAlign: 'center', justifyContent: 'center' }, headerClass: 'header-center' },
       { colId: 'unit', field: 'unit', headerName: 'Unit', width: 70, minWidth: 70 },
-      priceCol('costPrice', 'Cost price'),
+      ...(canSeeCost ? [priceCol('costPrice', 'Cost price')] : []),
       priceCol('salePrice', 'Sale price'),
-      {
-        colId: 'margin', headerName: 'Margin', width: 80, minWidth: 80, sortable: false,
-        cellStyle: { textAlign: 'center', justifyContent: 'center' },
-        valueGetter: ({ data }) => (data && data.salePrice > 0 ? (data.salePrice - data.costPrice) / data.salePrice : null),
-        valueFormatter: ({ value }) => (value == null ? '' : `${(value * 100).toFixed(1)}%`),
-      },
+      ...(canSeeCost
+        ? [{
+          colId: 'margin', headerName: 'Margin', width: 80, minWidth: 80, sortable: false,
+          cellStyle: { textAlign: 'center', justifyContent: 'center' },
+          valueGetter: ({ data }) => (data && data.salePrice > 0 ? (data.salePrice - data.costPrice) / data.salePrice : null),
+          valueFormatter: ({ value }) => (value == null ? '' : `${(value * 100).toFixed(1)}%`),
+        }]
+        : []),
       {
         colId: 'minStock', field: 'minStock', headerName: 'Min stock', width: 95, minWidth: 95,
         cellStyle: { textAlign: 'center', justifyContent: 'center' },
@@ -235,7 +238,7 @@ export default function ProductsGrid({ options }) {
         }]
         : []),
     ];
-  }, [canManage, canSeeHistory]);
+  }, [canManage, canSeeHistory, canSeeCost]);
 
   const defaultColDef = useMemo(() => ({ sortable: true, resizable: true }), []);
   const hideableColumns = columnDefs.filter((c) => !c.lockVisible && c.colId !== 'sku');

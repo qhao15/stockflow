@@ -3,10 +3,12 @@ import { Link as RouterLink, Navigate, useSearchParams } from 'react-router-dom'
 import { Alert, Box, Button, Link, TextField, Typography } from '@mui/material';
 import { safeRedirect, useAuth } from '../auth/AuthContext';
 import AuthLayout from '../auth/AuthLayout';
+import useRegistrationOpen from '../auth/useRegistrationOpen';
 import { errorMessage } from '../lib/api';
 
 export default function Login() {
   const { user, login } = useAuth();
+  const registrationOpen = useRegistrationOpen();
   const [searchParams] = useSearchParams();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
@@ -45,12 +47,14 @@ export default function Login() {
         <Button type="submit" variant="contained" size="large" disabled={submitting}>
           {submitting ? 'Signing in…' : 'Sign in'}
         </Button>
-        <Typography variant="body2" textAlign="center" color="text.secondary">
-          Don&apos;t have an account?{' '}
-          <Link component={RouterLink} to={redirect ? `/register?redirect=${encodeURIComponent(redirect)}` : '/register'} fontWeight={600}>
-            Create one
-          </Link>
-        </Typography>
+        {registrationOpen && (
+          <Typography variant="body2" textAlign="center" color="text.secondary">
+            Don&apos;t have an account?{' '}
+            <Link component={RouterLink} to={redirect ? `/register?redirect=${encodeURIComponent(redirect)}` : '/register'} fontWeight={600}>
+              Create one
+            </Link>
+          </Typography>
+        )}
       </Box>
     </AuthLayout>
   );
