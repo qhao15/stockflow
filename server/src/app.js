@@ -17,6 +17,7 @@ import customersRouter from './routes/customers.js';
 import salesOrdersRouter from './routes/salesOrders.js';
 import auditLogsRouter from './routes/auditLogs.js';
 import reportsRouter from './routes/reports.js';
+import { apiLimiter } from './auth/rateLimit.js';
 
 const app = express();
 const clientDist = fileURLToPath(new URL('../../client/dist', import.meta.url));
@@ -46,7 +47,7 @@ app.use('/api', (req, res) => res.status(404).json({ message: 'Not found' }));
 
 // The built client, on the same address as the API. Any other path is a client-side route.
 app.use(express.static(clientDist));
-app.get('*', (req, res) => res.sendFile(`${clientDist}/index.html`));
+app.get('*', apiLimiter, (req, res) => res.sendFile(`${clientDist}/index.html`));
 
 app.use((err, req, res, next) => {
   console.error(err);
