@@ -205,6 +205,25 @@ test('a file with one bad row imports nothing', async () => {
   expect((await savedProduct(product)).salePrice).toBe(25);
 });
 
+test('Managers see cost and margin; Staff see neither, on the screen or in the export', async () => {
+  const product = await createProduct(api);
+
+  await signIn(page, manager);
+  await openGrid(product.sku);
+  await expect(cell(product, 'costPrice')).toHaveText('$10.00');
+  await expect(cell(product, 'margin')).toBeVisible();
+
+  await clearLogin(page);
+  await signIn(page, staff);
+  await openGrid(product.sku);
+  await expect(cell(product, 'salePrice')).toHaveText('$25.00');
+  await expect(page.getByRole('columnheader', { name: 'Cost price' })).toHaveCount(0);
+  await expect(page.getByRole('columnheader', { name: 'Margin' })).toHaveCount(0);
+
+  const workbook = await exportExcel();
+  expect(workbook.getWorksheet('Products').getRow(1).values).not.toContain('Cost price');
+});
+
 test('Staff can search and export, but not change anything', async () => {
   const product = await createProduct(api);
   await signIn(page, staff);

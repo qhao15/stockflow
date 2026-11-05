@@ -3,7 +3,10 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
+const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, DB_SSL_CA } = process.env;
+
+// Hosted MySQL (Aiven) needs an encrypted connection; local XAMPP doesn't use one.
+const ssl = DB_SSL_CA ? { ca: DB_SSL_CA } : undefined;
 
 // Create the database on first run so no manual SQL step is needed.
 export async function ensureDatabase() {
@@ -12,6 +15,7 @@ export async function ensureDatabase() {
     port: Number(DB_PORT),
     user: DB_USER,
     password: DB_PASSWORD,
+    ssl,
   });
   await conn.query(
     `CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
@@ -24,6 +28,7 @@ export const pool = mysql.createPool({
   port: Number(DB_PORT),
   user: DB_USER,
   password: DB_PASSWORD,
+  ssl,
   database: DB_NAME,
   waitForConnections: true,
   connectionLimit: 10,

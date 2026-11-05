@@ -49,6 +49,24 @@ test('register: later sign-ups become Staff, emails are unique and stored lowerc
   assert.match(row.password_hash, /^\$2[aby]\$/, 'it is a bcrypt hash');
 });
 
+test('register: ALLOW_REGISTRATION=false closes sign-up, and login still works', async (t) => {
+  assert.deepEqual((await api.call('GET', '/auth/options')).body, { registrationOpen: true });
+
+  process.env.ALLOW_REGISTRATION = 'false';
+  t.after(() => delete process.env.ALLOW_REGISTRATION);
+  assert.deepEqual((await api.call('GET', '/auth/options')).body, { registrationOpen: false });
+
+  const email = `${tag}-closed@test.invalid`;
+  trackEmail(email);
+  const refused = await api.call('POST', '/auth/register', { body: { name: 'Closed', email, password: PASSWORD } });
+  assert.equal(refused.status, 403);
+  const [rows] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+  assert.equal(rows.length, 0, 'no account was created');
+
+  const user = await createUser(tag, 'staff');
+  assert.equal((await api.call('POST', '/auth/login', { body: { email: user.email, password: PASSWORD } })).status, 200);
+});
+
 test('register: validation', async () => {
   const short = await api.call('POST', '/auth/register', { body: { name: 'X', email: `${tag}-v@test.invalid`, password: 'short' } });
   assert.equal(short.status, 400);

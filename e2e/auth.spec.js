@@ -58,6 +58,22 @@ test('the session survives a page reload', async () => {
   await expectGreeting(page, user.name);
 });
 
+test('with sign-up closed, the pages stop offering it', async () => {
+  // The server's refusal is tested in server/tests/auth.test.js. This fakes only its answer.
+  await page.route('**/api/auth/options', (route) => route.fulfill({ json: { registrationOpen: false } }));
+  try {
+    await page.goto('/login');
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Create one' })).toHaveCount(0);
+
+    await page.goto('/register');
+    await expect(page.getByText('Sign-up is closed')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Create account' })).toHaveCount(0);
+  } finally {
+    await page.unroute('**/api/auth/options');
+  }
+});
+
 test('a new account can register and becomes Staff', async () => {
   const email = newEmail('register');
   const password = newPassword();

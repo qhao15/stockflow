@@ -3,10 +3,12 @@ import { Link as RouterLink, Navigate, useSearchParams } from 'react-router-dom'
 import { Alert, Box, Button, Link, TextField, Typography } from '@mui/material';
 import { safeRedirect, useAuth } from '../auth/AuthContext';
 import AuthLayout from '../auth/AuthLayout';
+import useRegistrationOpen from '../auth/useRegistrationOpen';
 import { errorMessage } from '../lib/api';
 
 export default function Register() {
   const { user, register } = useAuth();
+  const registrationOpen = useRegistrationOpen();
   const [searchParams] = useSearchParams();
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' });
   const [error, setError] = useState('');
@@ -14,6 +16,17 @@ export default function Register() {
 
   const redirect = searchParams.get('redirect');
   if (user) return <Navigate to={safeRedirect(redirect)} replace />;
+
+  if (!registrationOpen) {
+    return (
+      <AuthLayout title="Create an account" subtitle="Start managing your sales and inventory.">
+        <Box sx={{ display: 'grid', gap: 2 }}>
+          <Alert severity="info">Sign-up is closed. Ask an admin for an account.</Alert>
+          <Button component={RouterLink} to="/login" variant="contained" size="large">Back to sign in</Button>
+        </Box>
+      </AuthLayout>
+    );
+  }
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
   const mismatch = form.confirm !== '' && form.confirm !== form.password;

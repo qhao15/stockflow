@@ -8,6 +8,8 @@ const MANAGEMENT = ['admin', 'manager'];
 
 export const PERMISSIONS = {
   'products.view': ALL,
+  // Cost prices, and the margins they reveal. The API leaves them out for everyone else.
+  'products.cost': MANAGEMENT,
   'products.manage': MANAGEMENT,
 
   'stock.view': ALL,

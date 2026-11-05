@@ -11,7 +11,7 @@ const EXPECTED = {
     'products.view', 'stock.view', 'sales_orders.view', 'sales_orders.create', 'customers.view', 'customers.manage',
   ],
   manager: [
-    'products.view', 'products.manage',
+    'products.view', 'products.cost', 'products.manage',
     'stock.view', 'stock.transfer', 'stock.adjust',
     'purchase_orders.view', 'purchase_orders.create', 'purchase_orders.approve', 'purchase_orders.receive', 'purchase_orders.cancel',
     'sales_orders.view', 'sales_orders.create', 'sales_orders.cancel',
