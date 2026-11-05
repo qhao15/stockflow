@@ -41,7 +41,8 @@ export default function CustomerPicker({ value, onChange, required, disabled }) 
       <Autocomplete
         value={value}
         onChange={(e, customer) => {
-          if (customer?.isNewOption) setAdding({});
+          // Take the name now: picking an option clears what was typed in this box.
+          if (customer?.isNewOption) setAdding(value ? {} : { name: input });
           else onChange(customer);
         }}
         inputValue={input}
@@ -70,7 +71,6 @@ export default function CustomerPicker({ value, onChange, required, disabled }) 
       />
       <ContactDialog
         contact={adding}
-        initialName={value ? '' : input}
         onClose={() => setAdding(null)}
         onSaved={(customer) => {
           setAdding(null);

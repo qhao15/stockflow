@@ -24,6 +24,7 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
 | Backend  | Node.js, Express, ExcelJS (Excel import/export), PDFKit (PDF invoices), Multer (file uploads), express-rate-limit |
 | Database | MySQL 8 / MariaDB 10.4+ (via `mysql2`)                 |
 | Auth     | JSON Web Tokens (`jsonwebtoken`), `bcryptjs` password hashing |
+| Testing  | Node.js test runner (API and services), Playwright (browser) |
 
 ## Features
 
@@ -307,10 +308,12 @@ stockflow/
 │   │   ├── app.js              # Express app: middleware and routes (tests start their own copy)
 │   │   └── index.js            # Entry point: checks .env, prepares the database, starts the server
 │   └── tests/                  # API and service tests against MySQL, incl. concurrency (npm test)
+├── e2e/                        # Playwright browser tests (npm run test:e2e)
 ├── ERD.md                      # Entity Relationship Diagram
 ├── SECURITY.md                 # How to report a vulnerability
 ├── scripts/wait-for-api.js     # Lets `npm run dev` start the frontend once the API is up
-└── package.json                # Root scripts (run both apps together)
+├── playwright.config.js        # Playwright settings: site address, browser, starting the app
+└── package.json                # Root scripts (run both apps together, browser tests)
 ```
 
 ## Getting started
@@ -486,6 +489,30 @@ The tests run against the database in `server/.env`. Each file creates its own t
 | `stock.test.js` | Concurrent transfers of the last units; opposite transfers without deadlock; rollback half-way; no negative stock; stale adjustments refused |
 | `purchaseOrders.test.js` | Receiving twice at once adds stock once; an error on any line rolls back the receipt; status rules; stale draft edits refused |
 | `salesOrders.test.js` | The last unit can't be sold twice; a short line deducts nothing; prices copied onto lines; a double cancel returns stock once; invoice PDF |
+
+### Browser tests
+
+[Playwright](https://playwright.dev) tests in [`e2e/`](e2e/) use the real site in a browser, so they also cover the React pages. They start their own copy of the API and the client on separate ports, so they can run next to `npm run dev`, and use the database in `server/.env`, so MySQL must be running. Run them against a local database only, because they create temporary accounts and data in it (named `E2E`, deleted before and after each run). They run on your own computer and aren't part of CI yet. The 69 tests run one file at a time, each file in its own browser window, which closes when the file is done. Their API raises the request limit (`API_RATE_LIMIT`), because a whole test run comes from one address; the normal limit is unchanged.
+
+```bash
+npx playwright install chromium   # once, downloads the browser
+npm run test:e2e                  # no visible browser
+npm run test:e2e:headed           # watch the browser, slowed down by 2 seconds per action
+npm run test:e2e:ui               # step through the test in Playwright's window
+```
+
+| File | What it proves |
+| ---- | -------------- |
+| `admin.spec.js` | With two people signed in: a role change reaches a logged-in user without logging them out; a deactivated user is logged out on their next click and can return when reactivated; Admins can't change their own role or deactivate themselves; a role change appears in the Audit Log with who did it and the values before and after; the log's filters narrow an order's entries and its link opens the order |
+| `auth.spec.js` | Sign in and log out; a wrong password shows an error; a protected page asks for login and then returns to that page; the session survives a reload; a new account registers as Staff. |
+| `customers-suppliers.spec.js` | For both: add through the form with a generated code, find it in the list, edit it; with no orders it can be deleted, with orders only deactivated. Customer revenue leaves out cancelled orders; supplier spend counts only received orders, with approved ones as open; Staff can add a customer from inside the sales order form, with the typed name filled in; a new purchase order from a supplier page has that supplier picked |
+| `dashboard.spec.js` | KPI cards go up after a sale and open their pages; the revenue chart switches between days and months and between chart and table, with numbers matching the report; a date range filters it, and an impossible one shows an error; top products rank by quantity or revenue over a chosen period; the low-stock table lists a short product and View all opens the filtered stock page; Admins see the API and database status; the greeting follows the time of day |
+| `products.spec.js` | Add a product through the form; form errors show and it stays open; search finds only the match; a price edited in the grid saves and the margin follows; **two tabs: the second save is refused, loads the latest version and overwrites nothing**; export follows the search, and an edited file imports back; a file with one bad row imports nothing; Staff can't change anything |
+| `purchase-orders.spec.js` | Draft, approve and receive through the screens, with stock going up only on receipt; a draft can be edited; cancelling needs a reason and changes no stock; if someone else approved it first, the page refuses and shows the latest status; an approved order can't be opened for editing |
+| `resilience.spec.js` | With faked failures: with the server down the app keeps the login and can try again; it survives a restart by retrying; a 401 logs out and remembers the page; one failed report leaves the rest of the Dashboard working; a slow reply for an old list can't overwrite the count after a search; a failed save keeps what was typed. Also: logging out in one tab logs out the other, and at phone size the sidebar becomes a menu and the page fits the screen |
+| `roles.spec.js` | Each role's sidebar shows exactly its modules; going straight to a blocked address shows No access; Staff see no revenue or profit, the server doesn't send them, and restricted APIs answer `403`; Managers see revenue and suppliers; Admins see system status, the Audit Log and Users |
+| `sales-orders.spec.js` | Creating an order lowers stock and shows the right total; the form refuses more than is available; the server refuses an order if someone else sold the stock first; cancelling needs a reason and returns the stock; Staff can download the invoice PDF but not cancel |
+| `stock.spec.js` | A transfer moves the stock and shows both sides in the movement history; the form refuses too much stock and the same warehouse twice; the server refuses a transfer or adjustment if the stock changed meanwhile; an adjustment records its reason; the low-stock filter and highlight follow the chosen warehouse; Staff can see the history but not transfer or adjust |
 
 ## Development workflow
 

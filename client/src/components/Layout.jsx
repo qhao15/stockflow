@@ -125,7 +125,7 @@ export default function Layout() {
         }}
       >
         <Toolbar>
-          <IconButton edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 2, display: { md: 'none' } }}>
+          <IconButton edge="start" aria-label="Open menu" onClick={() => setMobileOpen(true)} sx={{ mr: 2, display: { md: 'none' } }}>
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" fontWeight="bold" sx={{ flexGrow: 1 }} noWrap>
@@ -226,7 +226,7 @@ export default function Layout() {
 
       <Box
         component="main"
-        sx={{ flexGrow: 1, p: 3, width: { md: `calc(100% - ${sidebarWidth}px)` }, transition: widthTransition }}
+        sx={{ flexGrow: 1, minWidth: 0, p: 3, width: { md: `calc(100% - ${sidebarWidth}px)` }, transition: widthTransition }}
       >
         <Toolbar />
         <Outlet />

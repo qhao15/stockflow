@@ -33,13 +33,17 @@ export default function StockGrid({ options }) {
   // /stock?lowStock=1 opens with the filter on (the dashboard links here).
   const [urlParams] = useSearchParams();
   const [filters, setFilters] = useState({ search: '', categoryId: '', warehouseId: '', lowStock: urlParams.get('lowStock') === '1' });
+  // So a slow reply for older filters can't overwrite the count.
+  const latestFilters = useRef(filters);
+  latestFilters.current = filters;
   const [toast, setToast] = useState(null);
   const [history, setHistory] = useState(null);
   const [transferring, setTransferring] = useState(null);
   const [adjusting, setAdjusting] = useState(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => setFilters((prev) => ({ ...prev, search: search.trim() })), 300);
+    // Unchanged: keep the same object, or the grid would load its rows again for nothing.
+    const timer = setTimeout(() => setFilters((prev) => (prev.search === search.trim() ? prev : { ...prev, search: search.trim() })), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
@@ -59,7 +63,7 @@ export default function StockGrid({ options }) {
               limit: params.endRow - params.startRow,
             },
           });
-          setTotal(res.data.total);
+          if (filters === latestFilters.current) setTotal(res.data.total);
           params.successCallback(res.data.rows, res.data.total);
         } catch (err) {
           setToast({ severity: 'error', message: errorMessage(err, 'Could not load stock') });

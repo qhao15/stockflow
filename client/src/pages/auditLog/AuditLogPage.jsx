@@ -95,7 +95,8 @@ export default function AuditLogPage() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setFilters((prev) => ({ ...prev, search: search.trim() }));
+      // Unchanged: keep the same object, or the list would load again for nothing.
+      setFilters((prev) => (prev.search === search.trim() ? prev : { ...prev, search: search.trim() }));
       setPage(0);
     }, 300);
     return () => clearTimeout(timer);
