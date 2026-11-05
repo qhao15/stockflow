@@ -83,3 +83,55 @@ jobs:
             sleep 1
           done
           echo "API did not become healthy"; cat server.log; exit 1
+
+  browser:
+    name: Browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: sales_inventory_e2e
+      JWT_SECRET: ci-only-secret-not-used-anywhere-else
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+            server/package-lock.json
+      - run: npm ci
+      - run: npm ci
+        working-directory: client
+      - run: npm ci
+        working-directory: server
+      - run: npx playwright install --with-deps chromium
+
+      # Playwright starts its own API and client (see playwright.config.js), on an empty database.
+      - name: Tests
+        run: npm run test:e2e
+
+      # A trace of every step of a failed test: npx playwright show-trace trace.zip
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
