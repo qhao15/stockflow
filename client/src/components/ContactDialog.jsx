@@ -14,10 +14,10 @@ const KINDS = {
   supplier: { path: '/suppliers', key: 'supplier', noun: 'supplier', nameLabel: 'Supplier name' },
 };
 
-// Add (contact = {}) or edit (contact = an existing one) a customer or supplier. Used by
-// the Customers and Suppliers pages and by the sales order form's customer picker
-// ("+ New customer"). initialName pre-fills the name, e.g. with what was typed.
-export default function ContactDialog({ kind = 'customer', contact, initialName = '', onClose, onSaved }) {
+// Add (contact = {}, or { name } to pre-fill it) or edit (contact = an existing one) a customer
+// or supplier. Used by the Customers and Suppliers pages and by the sales order form's customer
+// picker ("+ New customer").
+export default function ContactDialog({ kind = 'customer', contact, onClose, onSaved }) {
   const { path, key, noun, nameLabel } = KINDS[kind];
   const shown = useLastValue(contact);
   const isEdit = Boolean(shown?.id);
@@ -28,8 +28,8 @@ export default function ContactDialog({ kind = 'customer', contact, initialName 
   useEffect(() => {
     if (!contact) return;
     setError('');
-    setForm(Object.fromEntries(Object.keys(EMPTY).map((k) => [k, contact[k] ?? (k === 'name' ? initialName : '')])));
-  }, [contact, initialName]);
+    setForm(Object.fromEntries(Object.keys(EMPTY).map((k) => [k, contact[k] ?? ''])));
+  }, [contact]);
 
   const set = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
 

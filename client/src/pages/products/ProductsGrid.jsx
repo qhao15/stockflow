@@ -61,6 +61,9 @@ export default function ProductsGrid({ options }) {
   const gridRef = useRef(null);
   const [total, setTotal] = useState(null);
   const [filters, setFilters] = useState({ search: initialSearch, categoryId: '', status: 'all', lowStock: false });
+  // So a slow reply for older filters can't overwrite the count.
+  const latestFilters = useRef(filters);
+  latestFilters.current = filters;
   const [search, setSearch] = useState(initialSearch);
   const [toast, setToast] = useState(null);
   const [dialogProduct, setDialogProduct] = useState(undefined); // undefined = closed, null = new
@@ -73,7 +76,8 @@ export default function ProductsGrid({ options }) {
 
   // Search waits until typing pauses, so every keystroke doesn't hit the server.
   useEffect(() => {
-    const timer = setTimeout(() => setFilters((prev) => ({ ...prev, search: search.trim() })), 300);
+    // Unchanged: keep the same object, or the grid would load its rows again for nothing.
+    const timer = setTimeout(() => setFilters((prev) => (prev.search === search.trim() ? prev : { ...prev, search: search.trim() })), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
@@ -96,7 +100,7 @@ export default function ProductsGrid({ options }) {
           const res = await api.get('/products', {
             params: { ...queryParams(params.sortModel), offset: params.startRow, limit: params.endRow - params.startRow },
           });
-          setTotal(res.data.total);
+          if (filters === latestFilters.current) setTotal(res.data.total);
           params.successCallback(res.data.rows, res.data.total);
         } catch (err) {
           setToast({ severity: 'error', message: errorMessage(err, 'Could not load products') });

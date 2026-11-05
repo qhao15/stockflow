@@ -9,10 +9,11 @@ const limiter = (options) => rateLimit({
   handler: (req, res, next, opts) => res.status(opts.statusCode).json({ message: options.message }),
 });
 
-// Every API route: generous enough for the grids (one request per page of rows).
+// Every API route: generous enough for the grids (one request per page of rows). The browser
+// tests raise it, because a whole test run comes from one address.
 export const apiLimiter = limiter({
   windowMs: 60 * 1000,
-  limit: 300,
+  limit: Number(process.env.API_RATE_LIMIT) || 300,
   message: 'Too many requests, please slow down and try again in a minute',
 });
 

@@ -24,6 +24,9 @@ export default function CustomersPage() {
   const [total, setTotal] = useState(null);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({ search: '', city: '', status: 'active' });
+  // So a slow reply for older filters can't overwrite the count.
+  const latestFilters = useRef(filters);
+  latestFilters.current = filters;
   const [adding, setAdding] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -32,7 +35,8 @@ export default function CustomersPage() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => setFilters((prev) => ({ ...prev, search: search.trim() })), 300);
+    // Unchanged: keep the same object, or the list would load again for nothing.
+    const timer = setTimeout(() => setFilters((prev) => (prev.search === search.trim() ? prev : { ...prev, search: search.trim() })), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
@@ -51,7 +55,7 @@ export default function CustomersPage() {
               limit: params.endRow - params.startRow,
             },
           });
-          setTotal(res.data.total);
+          if (filters === latestFilters.current) setTotal(res.data.total);
           params.successCallback(res.data.rows, res.data.total);
         } catch (err) {
           setToast({ severity: 'error', message: errorMessage(err, 'Could not load customers') });
