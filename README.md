@@ -14,7 +14,9 @@
 
 StockFlow tracks products across multiple warehouses, handles purchase orders from suppliers and sales orders to customers, and keeps every stock change traceable through a movement ledger instead of a single editable number.
 
-> **Status:** in active development, version **0.3.0**. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, purchase orders, sales orders with PDF invoices, customers and suppliers, the audit log, and dashboard charts and reports are done (see [Roadmap](#roadmap)).
+**Live demo: [stockflow-ap0c.onrender.com](https://stockflow-ap0c.onrender.com)**. It runs on free hosting, so the first visit after a quiet spell can take about a minute while the server wakes up. Sign-up is closed, so use the [demo logins](#demo-logins).
+
+> **Status:** in active development, version **0.4.0**. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, purchase orders, sales orders with PDF invoices, customers and suppliers, the audit log, dashboard charts and reports, browser tests that run in CI, and a live deployment are done (see [Roadmap](#roadmap)).
 
 ## Tech stack
 
@@ -263,6 +265,8 @@ Admins can't demote or deactivate themselves, so the system always keeps at leas
 - `requirePermission('purchase_orders.approve')` middleware protects routes. It reads the role from the freshly loaded user, not from the token.
 - Changing or resetting a password records `password_changed_at`. Tokens issued before that moment are refused, so a stolen or forgotten session stops working, while the tab that made the change gets a fresh token.
 - The public health check says only whether the API and database are up. Database name, version and error text aren't exposed: details need Admin, and errors go to the server log.
+- The password-change time and the token's issue time are compared by the database, so a password reset run from a computer in another time zone than the server can't sign out every new login.
+- Sign-up can be closed with `ALLOW_REGISTRATION=false`; accounts then come from `npm run create-user`. The live demo has it closed.
 - Post-login redirects only accept same-site paths, so a crafted `?redirect=` link can't send users to another website.
 - **Rate limiting** ([`server/src/auth/rateLimit.js`](server/src/auth/rateLimit.js)): 10 failed login or register attempts per IP in 15 minutes, which slows down password guessing (successful logins don't count), and 300 requests per minute for the rest of the API. Over the limit the API answers `429` with a message the client shows.
 
@@ -519,6 +523,63 @@ npm run test:e2e:ui               # step through the test in Playwright's window
 | `sales-orders.spec.js` | Creating an order lowers stock and shows the right total; the form refuses more than is available; the server refuses an order if someone else sold the stock first; cancelling needs a reason and returns the stock; Staff can download the invoice PDF but not cancel |
 | `stock.spec.js` | A transfer moves the stock and shows both sides in the movement history; the form refuses too much stock and the same warehouse twice; the server refuses a transfer or adjustment if the stock changed meanwhile; an adjustment records its reason; the low-stock filter and highlight follow the chosen warehouse; Staff can see the history but not transfer or adjust |
 
+## Deployment
+
+### Demo logins
+
+Sign in at [stockflow-ap0c.onrender.com](https://stockflow-ap0c.onrender.com) with either account:
+
+| Role | Email | Password | What you can try |
+| ---- | ----- | -------- | ---------------- |
+| Manager | `manager@stockflow.demo` | `pass1234` | Everything except users, warehouses and the audit log: revenue and profit charts, purchase orders from draft to received, sales orders and their cancellation, stock transfers and adjustments, editing products in the grid |
+| Staff | `staff@stockflow.demo` | `pass1234` | The everyday view: products and stock, new sales orders with PDF invoices, and customers, but no revenue, profit, cost prices or purchasing |
+
+Signing in with each one shows how the [roles](#roles-and-permissions) change what the app offers. It's shared demo data, so feel free to change things: it's reset from time to time.
+
+### Hosting
+
+The [live demo](https://stockflow-ap0c.onrender.com) runs on free plans: the app on [Render](https://render.com) and the database on [Aiven for MySQL](https://aiven.io). The API serves the built client too, so one address serves both and no CORS setup is needed.
+
+| Render setting | Value |
+| -------------- | ----- |
+| Build Command | `cd client && npm ci --include=dev && npm run build && cd ../server && npm ci` |
+| Start Command | `cd server && npm start` |
+| Health Check Path | `/api/health` |
+
+Environment variables on Render (see [Configure the server](#2-configure-the-server) for the full list):
+
+| Variable | Value |
+| -------- | ----- |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | The Aiven database |
+| `DB_SSL_CA` | Aiven's CA certificate, the whole PEM text, for an encrypted connection |
+| `JWT_SECRET` | A new long random string, not the local one |
+| `ALLOW_REGISTRATION` | `false`, so nobody can sign up |
+| `TRUST_PROXY` | `3`: each request passes the visitor, Cloudflare, then Render's network. `GET /api/health/ip` shows the address the server sees |
+| `NODE_VERSION` | `24` |
+| `CLIENT_URL` | The site's address |
+
+`TIME_ZONE` is left at its default, `+07:00`.
+
+The demo data is loaded from a developer's computer, with the hosted database's settings set only for that one command (in Git Bash, the brackets keep them from staying in the terminal, so local tests can't reach the hosted database):
+
+```bash
+(
+  export DB_HOST=... DB_PORT=... DB_USER=... DB_PASSWORD=... DB_NAME=...
+  export DB_SSL_CA="$(cat path/to/aiven-ca.pem)"
+  export SEED_PASSWORD=...        # required: the public demo1234 is refused on a hosted database
+  npm run seed --prefix server
+  npm run create-admin --prefix server -- admin@stockflow.demo <private-password>   # the Admin gets its own password
+)
+```
+
+Every merge to `main` deploys again. On the free plans, Render sleeps after 15 minutes without visitors and takes about a minute to wake, and Aiven may power off an inactive database (it can be turned back on).
+
+Problems found while deploying, and fixed:
+
+- **Time zones.** Development ran in UTC+7 and the hosting in UTC, so a password reset looked 7 hours in the future (every Admin login was signed straight out), report days split at 7 am, and invoices could show the previous day. `TIME_ZONE` now sets one zone for Node and every database session.
+- **Visitor addresses.** Behind Cloudflare and Render's network, every request seemed to come from one internal address, so all visitors would have shared one login rate limit. `TRUST_PROXY=3` takes the visitor's own address, and a forged `X-Forwarded-For` header is still ignored.
+- **A route without a rate limit.** CodeQL flagged the route that serves the client's pages, which reads a file on every request. It now uses the same limit as the API.
+
 ## Development workflow
 
 - **Planning:** each roadmap item is a [GitHub issue](https://github.com/qhao15/stockflow/issues) with a task checklist, grouped into milestones and tracked on the [project board](https://github.com/users/qhao15/projects/1).
@@ -555,6 +616,12 @@ Progress is tracked on the [project board](https://github.com/users/qhao15/proje
 - [x] Dashboard charts and reports ([#10](https://github.com/qhao15/stockflow/issues/10))
 - [x] Audit log ([#11](https://github.com/qhao15/stockflow/issues/11))
 
-**[v0.4 Updates](https://github.com/qhao15/stockflow/milestone/4)** · coming soon
+**[v0.4 Testing & deployment](https://github.com/qhao15/stockflow/milestone/4)** · released as [v0.4.0](https://github.com/qhao15/stockflow/releases/tag/v0.4.0)
+
+- [x] Playwright browser tests, and fixes for the bugs they found ([#43](https://github.com/qhao15/stockflow/pull/43))
+- [x] Browser tests in CI, and the server prepared for hosting ([#44](https://github.com/qhao15/stockflow/pull/44))
+- [x] Live deployment: one time zone for all dates, logins after a password reset, real visitor addresses ([#45](https://github.com/qhao15/stockflow/pull/45))
+
+**[v0.5 Updates](https://github.com/qhao15/stockflow/milestone/5)** · coming soon
 
 - [ ] Updating ([#39](https://github.com/qhao15/stockflow/issues/39))
