@@ -55,12 +55,13 @@ router.put('/password', async (req, res, next) => {
       return res.status(400).json({ message: 'Current password is incorrect' });
     }
 
-    // Whole seconds, to match the token's iat (also whole seconds).
-    const changedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
+    // Whole seconds, like the token's iat. Sent as a Unix time, so this computer's time zone
+    // can't shift it (see requireAuth).
+    const changedAt = Math.floor(Date.now() / 1000);
     const passwordHash = await bcrypt.hash(newPassword, 10);
     // Logged without any values: only that the password was changed, and when.
     await withTransaction(async (conn) => {
-      await conn.query('UPDATE users SET password_hash = ?, password_changed_at = ? WHERE id = ?', [
+      await conn.query('UPDATE users SET password_hash = ?, password_changed_at = FROM_UNIXTIME(?) WHERE id = ?', [
         passwordHash, changedAt, req.user.id,
       ]);
       await audit(conn, auditContext(req), { action: 'password_change', entity: 'user', entityId: req.user.id, label: req.user.email, changes: {} });

@@ -22,8 +22,11 @@ import { apiLimiter } from './auth/rateLimit.js';
 const app = express();
 const clientDist = fileURLToPath(new URL('../../client/dist', import.meta.url));
 
-// Hosted behind a proxy: req.ip must be the visitor's address, for rate limits and the audit log.
-app.set('trust proxy', 1);
+// Hosted behind proxies: req.ip must be the visitor's address, for rate limits and the audit log.
+// TRUST_PROXY is how many proxies sit in front of the app; /api/health/ip shows what it gives.
+// Too high would let a visitor pick their own address with a forged X-Forwarded-For header.
+const trustProxy = Number(process.env.TRUST_PROXY ?? 1);
+app.set('trust proxy', Number.isInteger(trustProxy) && trustProxy >= 0 ? trustProxy : 1);
 
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }));
 app.use(express.json());

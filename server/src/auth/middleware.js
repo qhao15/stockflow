@@ -33,14 +33,17 @@ export async function requireAuth(req, res, next) {
   }
 
   try {
+    // Compared by the database, in its own time zone: the change time may have been written by
+    // a script on a computer in another time zone than this server's.
     const [rows] = await pool.query(
-      'SELECT id, name, email, role, is_active, password_changed_at FROM users WHERE id = ?',
-      [payload.sub]
+      `SELECT id, name, email, role, is_active, password_changed_at > FROM_UNIXTIME(?) AS password_changed_since
+       FROM users WHERE id = ?`,
+      [payload.iat, payload.sub]
     );
     const user = rows[0];
     if (!user || !user.is_active) return res.status(401).json({ message: 'Account not available' });
     // A password change signs out every session that logged in with the old password.
-    if (user.password_changed_at && payload.iat * 1000 < user.password_changed_at.getTime()) {
+    if (user.password_changed_since) {
       return res.status(401).json({ message: 'Your password was changed, please log in again' });
     }
     req.user = publicUser(user);

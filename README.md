@@ -355,6 +355,8 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 | `DB_PASSWORD`    | *(empty)*               | MySQL password                                       |
 | `DB_NAME`        | `sales_inventory`       | Database name (created automatically)                |
 | `CLIENT_URL`     | `http://localhost:5173` | Allowed CORS origin                                  |
+| `TIME_ZONE`      | `+07:00`                | The business's time zone, as a whole-hour offset: what "today" and "this month" mean in reports, invoice dates, and how times are stored. Applied to Node and to every database session, so it doesn't depend on the computer or server |
+| `TRUST_PROXY`    | `1`                     | How many proxies sit in front of the server when hosted, so rate limits and the audit log see each visitor's address; `GET /api/health/ip` shows the result |
 | `JWT_SECRET`     | *(required)*            | Secret used to sign login tokens; the server won't start without it |
 | `JWT_EXPIRES_IN` | `1d`                    | How long a login lasts (e.g. `8h`, `7d`)             |
 | `ALLOW_REGISTRATION` | `true`                | `false` closes sign-up, for a public site; accounts then come from `npm run create-user` |
@@ -401,6 +403,7 @@ Passwords must be at least 8 characters. This is also the way to reset a forgott
 | ------ | -------------------- | ---- | ------------------------------------------------------------------- |
 | GET    | `/api/health`        | –    | Whether the API and database are up (`503` if the database isn't); no names, versions or error text |
 | GET    | `/api/health/details` | `settings.manage` | Database name and version, for the Admin's status card |
+| GET    | `/api/health/ip`     | –    | The address the server sees for you, and the proxy chain, for setting `TRUST_PROXY` |
 | GET    | `/api/auth/options`  | –    | Whether sign-up is open |
 | POST   | `/api/auth/register` | –    | Create an account and sign in (first account becomes Admin, later ones Staff) |
 | POST   | `/api/auth/login`    | –    | Sign in; returns `{ token, user }`                                  |
