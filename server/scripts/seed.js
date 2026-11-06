@@ -550,8 +550,8 @@ async function verify() {
 // on a hosted one it would let anyone sign in as the demo Admin.
 const seedPassword = process.env.SEED_PASSWORD || DEMO_PASSWORD;
 const isLocalDatabase = ['localhost', '127.0.0.1', '::1'].includes(process.env.DB_HOST);
-if (!isLocalDatabase && !process.env.SEED_PASSWORD) {
-  console.error(`${process.env.DB_HOST} isn't a local database: set SEED_PASSWORD to choose the demo accounts' password.`);
+if (!isLocalDatabase && seedPassword === DEMO_PASSWORD) {
+  console.error(`${process.env.DB_HOST} isn't a local database: set SEED_PASSWORD to a password other than the public ${DEMO_PASSWORD}.`);
   process.exit(1);
 }
 if (seedPassword.length < 8) {

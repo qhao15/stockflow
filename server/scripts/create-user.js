@@ -27,12 +27,13 @@ try {
   await ensureDatabase();
   await ensureSchema();
   const passwordHash = await bcrypt.hash(password, 10);
-  // Resetting the password of an existing account signs out its sessions (see requireAuth).
-  const changedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
+  // Resetting the password of an existing account signs out its sessions (see requireAuth). Sent
+  // as a Unix time: this script may run in another time zone than the server, e.g. Vietnam vs UTC.
+  const changedAt = Math.floor(Date.now() / 1000);
   await pool.query(
     `INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE name = VALUES(name), password_hash = VALUES(password_hash),
-       role = VALUES(role), is_active = 1, password_changed_at = ?`,
+       role = VALUES(role), is_active = 1, password_changed_at = FROM_UNIXTIME(?)`,
     [displayName, email, passwordHash, role, changedAt]
   );
   console.log(`${displayName} account ready: ${email} (${role})`);

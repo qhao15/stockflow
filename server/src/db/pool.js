@@ -5,6 +5,16 @@ dotenv.config();
 
 const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, DB_SSL_CA } = process.env;
 
+// The business's time zone, for every date: what "today" and "this month" mean in reports, the
+// date on an invoice, and how times travel between Node and MySQL. Set once here, for both Node
+// and each database session, so it no longer depends on where the code runs (a laptop in
+// Vietnam, a server in UTC). A whole-hour offset, because MySQL may not know zone names.
+export const TIME_ZONE = process.env.TIME_ZONE || '+07:00';
+const offset = /^([+-])(\d{2}):00$/.exec(TIME_ZONE);
+if (!offset) throw new Error(`TIME_ZONE must be a whole-hour offset like +07:00, not "${TIME_ZONE}"`);
+// Etc/GMT names have the opposite sign: Etc/GMT-7 is UTC+7.
+process.env.TZ = `Etc/GMT${offset[1] === '+' ? '-' : '+'}${Number(offset[2])}`;
+
 // Hosted MySQL (Aiven) needs an encrypted connection; local XAMPP doesn't use one.
 const ssl = DB_SSL_CA ? { ca: DB_SSL_CA } : undefined;
 
@@ -36,6 +46,9 @@ export const pool = mysql.createPool({
   // become midnight in the server's time zone and could show as the previous day elsewhere.
   dateStrings: ['DATE'],
 });
+
+// NOW(), DATE_FORMAT and TIMESTAMP columns follow the session's time zone.
+pool.pool.on('connection', (conn) => conn.query(`SET time_zone = '${TIME_ZONE}'`));
 
 const RETRYABLE = new Set(['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT']);
 

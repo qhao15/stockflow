@@ -27,6 +27,16 @@ test('public health says the database is connected, and nothing about which one'
   assert.deepEqual(res.body.database, { status: 'connected' });
 });
 
+test('the visitor address comes from the nearest proxy, so a forged header earlier in the chain is ignored', async () => {
+  const seen = async (forwardedFor) => {
+    const res = await fetch(`${api.base}/health/ip`, { headers: forwardedFor ? { 'X-Forwarded-For': forwardedFor } : {} });
+    return (await res.json()).ip;
+  };
+  assert.match(await seen(), /127\.0\.0\.1/, 'no proxy: the connection itself');
+  assert.equal(await seen('203.0.113.7'), '203.0.113.7', 'one proxy (the default TRUST_PROXY=1): the address it added');
+  assert.equal(await seen('6.6.6.6, 203.0.113.7'), '203.0.113.7', 'a forged first entry is not trusted');
+});
+
 test('a database failure answers 503 without the error text', async (t) => {
   const secret = "Access denied for user 'root'@'db.internal.example'";
   t.mock.method(pool, 'query', async () => { throw new Error(secret); });

@@ -20,6 +20,12 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/health/ip - the address the server sees for you, and the proxy chain it came through,
+// for setting TRUST_PROXY. Only your own address, so nothing private about anyone else.
+router.get('/ip', (req, res) => {
+  res.json({ ip: req.ip, forwardedFor: req.get('x-forwarded-for') ?? null });
+});
+
 // GET /api/health/details - the database name and version, for the Admin's system status card.
 router.get('/details', requireAuth, requirePermission('settings.manage'), async (req, res, next) => {
   try {
