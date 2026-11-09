@@ -23,7 +23,7 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
 | Layer    | Technology                                             |
 | -------- | ------------------------------------------------------ |
 | Frontend | React 18, Vite, Material UI (MUI), AG Grid Community, Recharts, React Router, Axios |
-| Backend  | Node.js, Express, ExcelJS (Excel import/export), PDFKit (PDF invoices), Multer (file uploads), express-rate-limit |
+| Backend  | Node.js, Express, Swagger UI (API docs), ExcelJS (Excel import/export), PDFKit (PDF invoices), Multer (file uploads), express-rate-limit |
 | Database | MySQL 8 / MariaDB 10.4+ (via `mysql2`)                 |
 | Auth     | JSON Web Tokens (`jsonwebtoken`), `bcryptjs` password hashing |
 | Testing  | Node.js test runner (API and services), Playwright (browser) |
@@ -324,7 +324,7 @@ stockflow/
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 20 or newer (required by React Router 7)
+- [Node.js](https://nodejs.org/) 24, which CI and the live site use (React Router 7 needs at least 20)
 - MySQL 8 or MariaDB 10.4+ running locally (e.g. MySQL Community Server or XAMPP)
 
 ### 1. Clone and install
@@ -475,6 +475,8 @@ Missing or expired token → `401`; valid token without the permission → `403`
 
 Logging out is handled on the client by discarding the token.
 
+**Interactive documentation:** [`/api/docs`](https://stockflow-ap0c.onrender.com/api/docs) shows every endpoint with its parameters, request body and responses, and lets you try them: call `POST /auth/login`, click **Authorize** and paste the token. The same description is at `/api/openapi.json` for tools. It's written in [`server/src/docs/openapi.js`](server/src/docs/openapi.js), and [`apiDocs.test.js`](server/tests/apiDocs.test.js) fails if a route is added without being documented.
+
 ## Tests
 
 ```bash
@@ -491,6 +493,7 @@ The tests run against the database in `server/.env`. Each file creates its own t
 | `customers.test.js` | Generated codes; validation; search; totals leave out cancelled orders; a customer with orders can only be deactivated |
 | `audit.test.js` | One audit row per committed change, with only the changed fields; none for a rolled-back change; no password or hash ever stored; orders, stock moves and role changes logged with details; filters; Admin only |
 | `reports.test.js` | Revenue and profit per day and month with exact cents; cancelled orders left out; empty days as 0; top products; low stock; Staff never get revenue |
+| `apiDocs.test.js` | Every route is documented and every documented endpoint exists; a role without the documented permission gets `403`; the docs page is served |
 | `suppliers.test.js` | Spend counts received POs, open POs are separate, cancelled count for neither; delete vs deactivate; a new PO for an inactive supplier is refused; Staff get `403` |
 | `health.test.js` | The public check reveals only up or down; a database failure's error text never reaches a response; name and version are Admin only |
 | `account.test.js` | Profile changes keep emails unique and can't change the role; preferences are per user |
