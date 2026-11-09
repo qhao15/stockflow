@@ -18,6 +18,8 @@ import salesOrdersRouter from './routes/salesOrders.js';
 import auditLogsRouter from './routes/auditLogs.js';
 import reportsRouter from './routes/reports.js';
 import { apiLimiter } from './auth/rateLimit.js';
+import swaggerUi from 'swagger-ui-express';
+import { openApiSpec } from './docs/openapi.js';
 
 const app = express();
 const clientDist = fileURLToPath(new URL('../../client/dist', import.meta.url));
@@ -45,6 +47,10 @@ app.use('/api/customers', customersRouter);
 app.use('/api/sales-orders', salesOrdersRouter);
 app.use('/api/audit-logs', auditLogsRouter);
 app.use('/api/reports', reportsRouter);
+
+// The API documentation: /api/docs to read and try it, /api/openapi.json for tools.
+app.get('/api/openapi.json', apiLimiter, (req, res) => res.json(openApiSpec));
+app.use('/api/docs', apiLimiter, swaggerUi.serve, swaggerUi.setup(openApiSpec, { customSiteTitle: 'StockFlow API' }));
 
 app.use('/api', (req, res) => res.status(404).json({ message: 'Not found' }));
 
