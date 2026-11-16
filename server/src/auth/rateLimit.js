@@ -17,6 +17,22 @@ export const apiLimiter = limiter({
   message: 'Too many requests, please slow down and try again in a minute',
 });
 
+// The assistant, per user rather than per address: questions will cost money once an AI model
+// answers them, and shared demo logins mean many people can sit behind one address.
+const perUser = (req) => `user-${req.user.id}`;
+export const chatLimiter = limiter({
+  windowMs: 60 * 1000,
+  limit: 10,
+  keyGenerator: perUser,
+  message: 'Too many questions, please wait a minute',
+});
+export const chatDailyLimiter = limiter({
+  windowMs: 24 * 60 * 60 * 1000,
+  limit: 100,
+  keyGenerator: perUser,
+  message: "You've reached today's limit for the assistant. Please try again tomorrow.",
+});
+
 // Login and register: only failed attempts count, so password guessing is slowed
 // down while a user who signs in normally is never blocked.
 export const authLimiter = limiter({

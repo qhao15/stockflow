@@ -26,7 +26,8 @@ export default defineConfig({
     {
       command: 'node src/index.js',
       cwd: 'server',
-      env: { PORT: '5001', API_RATE_LIMIT: '100000' },
+      // AI_API_KEY empty: the basic assistant answers, so browser tests never call a real AI provider.
+      env: { PORT: '5001', API_RATE_LIMIT: '100000', AI_API_KEY: '' },
       url: 'http://localhost:5001/api/health',
       timeout: 120_000,
     },
