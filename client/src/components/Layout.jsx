@@ -14,6 +14,7 @@ import { navItems } from '../navItems';
 import { useAuth } from '../auth/AuthContext';
 import Logo, { LogoMark } from './Logo';
 import { takeFlash } from '../lib/flash';
+import ChatPanel from './ChatPanel';
 
 const drawerWidth = 250;
 const collapsedWidth = 72;
@@ -226,11 +227,13 @@ export default function Layout() {
 
       <Box
         component="main"
-        sx={{ flexGrow: 1, minWidth: 0, p: 3, width: { md: `calc(100% - ${sidebarWidth}px)` }, transition: widthTransition }}
+        sx={{ flexGrow: 1, minWidth: 0, p: 3, pb: 12, width: { md: `calc(100% - ${sidebarWidth}px)` }, transition: widthTransition }}
       >
         <Toolbar />
         <Outlet />
       </Box>
+
+      <ChatPanel />
 
       <Dialog open={confirmLogout} onClose={() => setConfirmLogout(false)} maxWidth="xs" fullWidth>
         <DialogTitle>You want to log out?</DialogTitle>

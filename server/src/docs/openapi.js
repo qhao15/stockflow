@@ -175,6 +175,14 @@ const ENDPOINTS = [
   ['get', '/reports/revenue', 'Reports', 'Revenue, gross profit and orders per period', { auth: 'reports.view', query: [query('group', oneOf('day', 'month')), ...dates], errors: { 400: 'Invalid dates' } }],
   ['get', '/reports/top-products', 'Reports', 'Best sellers', { auth: 'reports.view', query: [query('by', oneOf('quantity', 'revenue')), ...dates, query('limit', integer)], errors: { 400: 'Invalid dates' } }],
   ['get', '/reports/low-stock', 'Reports', 'Products at or below their minimum, per warehouse', { auth: 'stock.view', query: paging, okSchema: 'Page' }],
+
+  ['get', '/chat/options', 'Assistant', 'Whether the assistant is on, and the lookups this role may use', { auth: true }],
+  ['post', '/chat', 'Assistant', 'Ask the assistant; the answer streams back as server-sent events', {
+    auth: true,
+    stream: true,
+    body: object({ messages: list(object({ role: oneOf('user', 'assistant'), content: string }, ['role', 'content'])) }, ['messages']),
+    errors: { 400: 'Invalid conversation or question too long', 429: 'Too many questions, per minute or per day' },
+  }],
 ];
 
 // ---------- building the document ----------
@@ -183,12 +191,13 @@ const json = (schema) => ({ 'application/json': { schema } });
 const ref = (name) => ({ $ref: `#/components/schemas/${name}` });
 const FILE_TYPES = { xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pdf: 'application/pdf' };
 
-function operation(path, tag, summary, { auth, body, upload, query: queryParams = [], ok = 200, okSchema, file, errors = {} } = {}) {
+function operation(path, tag, summary, { auth, body, upload, query: queryParams = [], ok = 200, okSchema, file, stream, errors = {} } = {}) {
   const pathParams = [...path.matchAll(/:(\w+)/g)].map(([, name]) => ({ name, in: 'path', required: true, schema: name === 'id' ? integer : string }));
   const responses = {
     [ok]: {
       description: ok === 204 ? 'Done, with no content' : 'Success',
       ...(file ? { content: { [FILE_TYPES[file]]: { schema: { type: 'string', format: 'binary' } } } } : {}),
+      ...(stream ? { content: { 'text/event-stream': { schema: { type: 'string', description: 'Lines of `data: {"type":"text","text":"..."}`, then `data: {"type":"done"}`' } } } } : {}),
       ...(okSchema ? { content: json(ref(okSchema)) } : {}),
     },
   };

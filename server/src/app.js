@@ -17,6 +17,7 @@ import customersRouter from './routes/customers.js';
 import salesOrdersRouter from './routes/salesOrders.js';
 import auditLogsRouter from './routes/auditLogs.js';
 import reportsRouter from './routes/reports.js';
+import chatRouter from './routes/chat.js';
 import { apiLimiter } from './auth/rateLimit.js';
 import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './docs/openapi.js';
@@ -47,6 +48,7 @@ app.use('/api/customers', customersRouter);
 app.use('/api/sales-orders', salesOrdersRouter);
 app.use('/api/audit-logs', auditLogsRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/chat', chatRouter);
 
 // The API documentation: /api/docs to read and try it, /api/openapi.json for tools.
 app.get('/api/openapi.json', apiLimiter, (req, res) => res.json(openApiSpec));

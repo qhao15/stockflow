@@ -16,7 +16,7 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
 
 **Live demo: [stockflow-ap0c.onrender.com](https://stockflow-ap0c.onrender.com)**. It runs on free hosting, so the first visit after a quiet spell can take about a minute while the server wakes up. Sign-up is closed, so use the [demo logins](#demo-logins).
 
-> **Status:** in active development, version **0.4.0**. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, purchase orders, sales orders with PDF invoices, customers and suppliers, the audit log, dashboard charts and reports, browser tests that run in CI, and a live deployment are done (see [Roadmap](#roadmap)).
+> **Status:** in active development, version **0.4.0**. Authentication, role-based access, the database schema with demo data, products, warehouses with stock and transfers, purchase orders, sales orders with PDF invoices, customers and suppliers, the audit log, dashboard charts and reports, browser tests that run in CI, a live deployment, and an AI chat assistant are done (see [Roadmap](#roadmap)).
 
 ## Tech stack
 
@@ -77,6 +77,12 @@ StockFlow tracks products across multiple warehouses, handles purchase orders fr
   - List with received POs, spend, open POs and last PO per supplier.
   - Detail page with contact details, totals (spend, average PO, open POs and their value) and the purchase order history, plus "New purchase order" with the supplier already picked.
   - Same add, edit, deactivate and delete rules as customers.
+- **Assistant** (every role, from the robot button in the bottom-right corner):
+  - Answers questions about stock, products, orders, customers, suppliers and this month's figures, with links to the matching pages.
+  - Uses only what the user's role can see: each lookup checks the same permission as its page, so Staff never get revenue or cost. It can't change anything.
+  - Answered by an AI model when one is set up (see [Assistant](#assistant)), which understands free-form questions and follow-ups and decides which lookups to use. Without one, or when the model's provider fails, a basic assistant answers instead: it recognises a few kinds of question without AI.
+  - Opens as a small window above the button. A click outside it closes it and still does what it was meant to, such as following a menu link. It grows with the chat, and dragging the bar at its top (or the arrow keys) sets a height that is remembered; a double-click goes back to sizing by the chat. Several chats are kept in the browser for each user, with a list to switch between them, start a new one or delete one.
+  - Limited to 10 questions a minute and 100 a day per user.
 
 ### Coming soon
 
@@ -201,6 +207,16 @@ Product brands are real; suppliers, customers and people are fictional. SKUs fol
 - **Admin only**, both the Audit Log page and the History sections. The demo data is loaded directly by the seed, so the log starts empty and fills as the app is used.
 - **Tests** ([`server/tests/audit.test.js`](server/tests/audit.test.js)): one row per committed change with only the changed fields; no row for a rolled-back change, an outdated edit or an oversold order; no password or hash ever stored; orders, stock moves and role changes logged with their details; filters; non-admins get `403`.
 
+## Assistant
+
+- **Any OpenAI-compatible provider.** The model is reached through the standard chat API that Google Gemini, Groq, OpenRouter and Ollama all offer, so changing provider means changing `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL`, not code. The live demo uses Google Gemini's free tier (`gemini-3.5-flash`, with `gemini-flash-lite-latest` as its backup). No extra package is needed: Node's own `fetch` streams the answer.
+- **Lookups, not database access.** The model is given only the read-only lookups in [`server/src/chat/tools.js`](server/src/chat/tools.js) that the user's role may use. Each one checks the permission again when it runs, so a model that asks for a lookup it wasn't given is refused, and Staff never get revenue or cost. The model's arguments are checked against the lookup's schema first, and each result is capped at a few rows.
+- **Answers only from what it looked up.** The instructions ([`aiAssistant.js`](server/src/chat/aiAssistant.js)) tell the model to take every number from a lookup result, to say when something is outside the role's access, to link to the app's pages as `[label](/path)`, and to treat names and notes in results as data, never as instructions.
+- **Follow-ups work.** The whole conversation (up to 20 messages) is sent each time, so "and in Da Nang?" refers to the product just asked about.
+- **Always an answer.** Free models are often busy, so `AI_MODEL` can list backups: when a model answers busy (`503`), out of quota (`429`) or retired (`404`), the next one takes the question, and the one that answered keeps it for the rest of its lookups. If they all fail before any text was sent, or the provider is slower than 30 seconds, the basic assistant answers that question instead. A model that keeps calling lookups is stopped after 4 rounds. Closing the chat stops a call that is still running.
+- **The key stays on the server.** The browser talks only to `/api/chat`; the per-user limits (10 questions a minute, 100 a day) cap what one account can spend.
+- **Tests** ([`server/tests/chat.test.js`](server/tests/chat.test.js)) never call a real provider: a fake one on a local port answers with scripted lookups, streamed in pieces like a real one, and the tests check what the model was sent and given back.
+
 ## Reports and performance
 
 - **What counts.** Cancelled orders are left out of every figure. Revenue is the order total after discount; gross profit subtracts the unit cost copied onto each line at the time of sale, so later price changes don't rewrite past profit. Totals are added up in cents.
@@ -306,6 +322,7 @@ stockflow/
 │   ├── src/
 │   │   ├── auth/               # permissions.js (role -> permission matrix), middleware.js (JWT + permission checks)
 │   │   ├── db/                 # pool.js (MySQL pool + auto-create database), schema.js (tables, created on startup)
+│   │   ├── chat/               # The assistant: read-only lookups per permission (tools.js), the AI assistant, and the basic one without AI
 │   │   ├── routes/             # API routes (health, auth, users, account, categories, products, warehouses, stock, suppliers, customers, purchase and sales orders, audit logs, reports)
 │   │   ├── services/           # Product, stock and order logic, stock ledger (changeStock, transfers, adjustments), audit log, reports, Excel, PDF invoices
 │   │   ├── validators/         # common.js (email/password, cancel reason), product.js (shared by the API and the import), stock.js, orders, contact.js
@@ -364,6 +381,9 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 | `JWT_SECRET`     | *(required)*            | Secret used to sign login tokens; the server won't start without it |
 | `JWT_EXPIRES_IN` | `1d`                    | How long a login lasts (e.g. `8h`, `7d`)             |
 | `ALLOW_REGISTRATION` | `true`                | `false` closes sign-up, for a public site; accounts then come from `npm run create-user` |
+| `AI_BASE_URL`    | Gemini's OpenAI-compatible address | The assistant's AI provider (any OpenAI-compatible chat API) |
+| `AI_API_KEY`     | *(empty)*               | The provider's API key, for example a free one from [Google AI Studio](https://aistudio.google.com). Empty: the basic assistant answers |
+| `AI_MODEL`       | `gemini-3.5-flash,gemini-flash-lite-latest` | The model, then any backups, comma-separated: the next one is tried when a model is busy, out of free quota or retired |
 | `COMPANY_NAME`, `COMPANY_ADDRESS`, `COMPANY_PHONE`, `COMPANY_EMAIL`, `COMPANY_TAX_ID` | fictional | Seller details printed on PDF invoices |
 
 The database and its tables are created automatically the first time the server starts, so no manual SQL is needed.
@@ -469,6 +489,8 @@ Passwords must be at least 8 characters. This is also the way to reset a forgott
 | GET    | `/api/reports/summary` | JWT | KPI figures; revenue fields only with `reports.view` |
 | GET    | `/api/reports/revenue` | `reports.view` | Revenue, gross profit and orders per period: `group` (`day` or `month`), `from`, `to` |
 | GET    | `/api/reports/top-products` | `reports.view` | Best sellers: `by` (`quantity` or `revenue`), `from`, `to`, `limit` |
+| GET    | `/api/chat/options`  | JWT  | Whether the assistant is on, which one answers (`ai` or `basic`), and the lookups this role may use |
+| POST   | `/api/chat`          | JWT  | Ask the assistant: `messages: [{ role, content }]` ending with the question (at most 500 characters, 20 messages); the answer streams back as server-sent events. 10 questions a minute and 100 a day per user |
 | GET    | `/api/reports/low-stock` | `stock.view` | Products at or below their minimum, per warehouse: `offset`, `limit` |
 
 Missing or expired token → `401`; valid token without the permission → `403`.
@@ -496,6 +518,7 @@ The tests run against the database in `server/.env`. Each file creates its own t
 | `apiDocs.test.js` | Every route is documented and every documented endpoint exists; a role without the documented permission gets `403`; the docs page is served |
 | `suppliers.test.js` | Spend counts received POs, open POs are separate, cancelled count for neither; delete vs deactivate; a new PO for an inactive supplier is refused; Staff get `403` |
 | `health.test.js` | The public check reveals only up or down; a database failure's error text never reaches a response; name and version are Admin only |
+| `chat.test.js` | Each role gets only its lookups, and a lookup checks the permission again when it runs; Staff never get revenue or cost; answers link to the right pages and stream as server-sent events; bad conversations are refused; 10 questions a minute per user, not per address. With a fake AI provider: the model gets the whole conversation and only the role's lookups, a lookup outside them is refused, its answer streams back, and a failing or looping model hands over to the basic assistant |
 | `account.test.js` | Profile changes keep emails unique and can't change the role; preferences are per user |
 | `products.test.js` | Validation; optimistic locking (`409` instead of overwriting); `%` and `_` in search are literal and unknown sort columns are ignored; delete rules; all-or-nothing Excel import; export → edit → import |
 | `stock.test.js` | Concurrent transfers of the last units; opposite transfers without deadlock; rollback half-way; no negative stock; stale adjustments refused |
@@ -504,7 +527,7 @@ The tests run against the database in `server/.env`. Each file creates its own t
 
 ### Browser tests
 
-[Playwright](https://playwright.dev) tests in [`e2e/`](e2e/) use the real site in a browser, so they also cover the React pages. They start their own copy of the API and the client on separate ports, so they can run next to `npm run dev`, and use the database in `server/.env`, so MySQL must be running. Run them against a local database only, because they create temporary accounts and data in it (named `E2E`, deleted before and after each run). The 71 tests run one file at a time, each file in its own browser window, which closes when the file is done. Their API raises the request limit (`API_RATE_LIMIT`), because a whole test run comes from one address; the normal limit is unchanged.
+[Playwright](https://playwright.dev) tests in [`e2e/`](e2e/) use the real site in a browser, so they also cover the React pages. They start their own copy of the API and the client on separate ports, so they can run next to `npm run dev`, and use the database in `server/.env`, so MySQL must be running. Run them against a local database only, because they create temporary accounts and data in it (named `E2E`, deleted before and after each run). The 75 tests run one file at a time, each file in its own browser window, which closes when the file is done. Their API raises the request limit (`API_RATE_LIMIT`), because a whole test run comes from one address; the normal limit is unchanged.
 
 ```bash
 npx playwright install chromium   # once, downloads the browser
@@ -516,6 +539,7 @@ npm run test:e2e:ui               # step through the test in Playwright's window
 | File | What it proves |
 | ---- | -------------- |
 | `admin.spec.js` | With two people signed in: a role change reaches a logged-in user without logging them out; a deactivated user is logged out on their next click and can return when reactivated; Admins can't change their own role or deactivate themselves; a role change appears in the Audit Log with who did it and the values before and after; the log's filters narrow an order's entries and its link opens the order |
+| `chat.spec.js` | An answer's link opens its page; a click outside closes the window and still works; several chats are saved, switched between and deleted, and survive a reload; Staff are refused what they can't see; the window can be resized by dragging or with the arrow keys, is remembered, stops at the screen's height and resets on a double-click |
 | `auth.spec.js` | Sign in and log out; a wrong password shows an error; a protected page asks for login and then returns to that page; the session survives a reload; a new account registers as Staff; with sign-up closed, the pages stop offering it. |
 | `customers-suppliers.spec.js` | For both: add through the form with a generated code, find it in the list, edit it; with no orders it can be deleted, with orders only deactivated. Customer revenue leaves out cancelled orders; supplier spend counts only received orders, with approved ones as open; Staff can add a customer from inside the sales order form, with the typed name filled in; a new purchase order from a supplier page has that supplier picked |
 | `dashboard.spec.js` | KPI cards go up after a sale and open their pages; the revenue chart switches between days and months and between chart and table, with numbers matching the report; a date range filters it, and an impossible one shows an error; top products rank by quantity or revenue over a chosen period; the low-stock table lists a short product and View all opens the filtered stock page; Admins see the API and database status; the greeting follows the time of day |
@@ -560,6 +584,7 @@ Environment variables on Render (see [Configure the server](#2-configure-the-ser
 | `TRUST_PROXY` | `3`: each request passes the visitor, Cloudflare, then Render's network. `GET /api/health/ip` shows the address the server sees |
 | `NODE_VERSION` | `24` |
 | `CLIENT_URL` | The site's address |
+| `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | The assistant's provider: Gemini's address, a Google AI Studio key, `gemini-3.5-flash,gemini-flash-lite-latest` |
 
 `TIME_ZONE` is left at its default, `+07:00`.
 
@@ -625,6 +650,7 @@ Progress is tracked on the [project board](https://github.com/users/qhao15/proje
 - [x] Browser tests in CI, and the server prepared for hosting ([#44](https://github.com/qhao15/stockflow/pull/44))
 - [x] Live deployment: one time zone for all dates, logins after a password reset, real visitor addresses ([#45](https://github.com/qhao15/stockflow/pull/45))
 
-**[v0.5 Updates](https://github.com/qhao15/stockflow/milestone/5)** · coming soon
+**[v0.5 Updates](https://github.com/qhao15/stockflow/milestone/5)**
 
+- [x] Chatbot assistant: answers questions with a free AI model through read-only lookups that follow each role's permissions ([#38](https://github.com/qhao15/stockflow/issues/38))
 - [ ] Updating ([#39](https://github.com/qhao15/stockflow/issues/39))
