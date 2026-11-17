@@ -1,6 +1,6 @@
 // The assistant in a real browser: the robot button and its small window, streamed answers with
-// links to pages, saved chats, and the same limits as the screens. It answers without an AI
-// model for now (basicAssistant.js).
+// links to pages, saved chats, and the same limits as the screens. The test API has no AI key
+// (playwright.config.js), so the basic assistant answers (basicAssistant.js).
 import { expect, test } from '@playwright/test';
 import { apiAs, clearLogin, createProduct, createTestUser, createWarehouse, signIn } from './helpers.js';
 
@@ -44,6 +44,9 @@ test('an answer links to its page; a click outside closes the window and still w
 
   await ask(`How many ${product.sku} are in stock?`);
   await expect(panel()).toContainText(`${warehouse.code} 12`);
+  // The header says which assistant is on. Without AI there is no "AI was busy" note.
+  await expect(panel().getByText('Basic', { exact: true })).toBeVisible();
+  await expect(panel()).not.toContainText('the AI was busy');
 
   await panel().getByRole('link', { name: product.sku }).click();
   await expect(page).toHaveURL((url) => url.pathname === '/products' && url.searchParams.get('search') === product.sku);

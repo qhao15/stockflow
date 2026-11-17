@@ -32,7 +32,7 @@ function validateMessages(messages) {
 }
 
 // POST /api/chat { messages } - the answer as server-sent events: { type: 'text', text } parts,
-// then { type: 'done' }, or { type: 'error', message } if it fails after it started.
+// then { type: 'done', assistant: 'ai' or 'basic' (which one answered) }, or { type: 'error', message } if it fails after it started.
 router.post('/', chatLimiter, chatDailyLimiter, async (req, res) => {
   const error = validateMessages(req.body.messages);
   if (error) return res.status(400).json({ message: error });
@@ -51,11 +51,12 @@ router.post('/', chatLimiter, chatDailyLimiter, async (req, res) => {
   res.on('close', () => stop.abort());
   try {
     const messages = req.body.messages.map(({ role, content }) => ({ role, content }));
-    for await (const text of answer({ messages, user: req.user, signal: stop.signal })) {
+    const answered = {};
+    for await (const text of answer({ messages, user: req.user, signal: stop.signal, answered })) {
       if (stop.signal.aborted) return;
       send({ type: 'text', text });
     }
-    send({ type: 'done' });
+    send({ type: 'done', assistant: answered.by });
   } catch (err) {
     if (stop.signal.aborted) return;
     console.error('Assistant failed:', err);

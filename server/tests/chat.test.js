@@ -41,10 +41,21 @@ before(async () => {
      VALUES (?, ?, ?, 'completed', NOW(), 19.98, 19.98, ?)`,
     [orderNumber, ids.customer, ids.warehouse, ids.user]
   );
+  await pool.query(
+    'INSERT INTO sales_order_items (sales_order_id, product_id, quantity, unit_price, unit_cost, line_total) VALUES (?, ?, 2, 9.99, 4.25, 19.98)',
+    [ids.order, ids.product]
+  );
+  await pool.query(
+    `INSERT INTO stock_movements (product_id, warehouse_id, type, quantity_change, balance_after, reference_type, reference_id, user_id, created_at)
+     VALUES (?, ?, 'sale', -2, 12, 'sales_order', ?, ?, NOW())`,
+    [ids.product, ids.warehouse, ids.order, ids.user]
+  );
 });
 
 after(async () => {
   try {
+    if (ids.product) await pool.query('DELETE FROM stock_movements WHERE product_id = ?', [ids.product]);
+    if (ids.order) await pool.query('DELETE FROM sales_order_items WHERE sales_order_id = ?', [ids.order]);
     if (ids.customer) await pool.query('DELETE FROM sales_orders WHERE customer_id = ?', [ids.customer]);
     if (ids.product) {
       await pool.query('DELETE FROM stock WHERE product_id = ?', [ids.product]);
@@ -69,8 +80,10 @@ async function ask(token, question) {
   assert.match(res.headers.get('content-type'), /text\/event-stream/);
   const events = res.body.toString().split('\n\n').filter(Boolean).map((e) => JSON.parse(e.replace(/^data: /, '')));
   assert.equal(events.at(-1).type, 'done', 'the stream ends with done');
+  lastAnsweredBy = events.at(-1).assistant;
   return events.filter((e) => e.type === 'text').map((e) => e.text).join('');
 }
+let lastAnsweredBy; // which assistant answered the latest ask(): 'ai' or 'basic'
 
 const STAFF = { role: 'staff' };
 const MANAGER = { role: 'manager' };
@@ -93,6 +106,39 @@ test('each role is given only the tools it may use, and a tool checks again when
   assert.deepEqual(Object.keys(summary).filter((k) => /revenue/i.test(k)), [], 'no revenue for Staff');
 });
 
+test("a product's stock movements, a customer's orders and revenue for any dates", async () => {
+  const names = (user) => toolsFor(user).map((t) => t.name);
+  assert.ok(names(STAFF).includes('stock_movements') && names(STAFF).includes('customer_orders'));
+  assert.ok(!names(STAFF).includes('revenue_report') && names(MANAGER).includes('revenue_report'));
+  await assert.rejects(runTool('revenue_report', { from: '2026-01-01', to: '2026-01-31' }, STAFF), { status: 403 });
+  // customer_orders needs both customers.view and sales_orders.view.
+  assert.equal(toolsFor({ role: 'nobody' }).some((t) => t.name === 'customer_orders'), false);
+
+  const moves = await runTool('stock_movements', { query: sku }, STAFF);
+  assert.equal(moves.product.sku, sku);
+  assert.deepEqual(moves.movements[0], {
+    date: moves.movements[0].date, warehouse: tag, type: 'sale', change: -2, balanceAfter: 12,
+    reference: { type: 'sales_order', number: orderNumber, id: ids.order }, by: 'Test staff',
+  });
+  assert.equal((await runTool('stock_movements', { query: 'no-such-product-xyz' }, STAFF)).message, 'No product matches');
+
+  const customer = await runTool('customer_orders', { query: tag }, STAFF);
+  assert.equal(customer.customer.code, tag);
+  assert.deepEqual(customer.orders.map((o) => o.orderNumber), [orderNumber]);
+  assert.deepEqual(customer.latestOrderLines, [{ sku, name: `Test cable ${tag}`, quantity: 2, unitPrice: 9.99, lineTotal: 19.98 }],
+    'what they bought, without the cost');
+
+  const today = new Date().toLocaleDateString('sv');
+  const day = await runTool('revenue_report', { from: today, to: today }, MANAGER);
+  assert.ok(day.totals.revenue >= 19.98 && day.totals.orders >= 1, 'includes the test order');
+  assert.equal(day.rows.length, 1);
+  const year = await runTool('revenue_report', { from: '2025-01-01', to: '2025-12-31' }, MANAGER);
+  assert.equal(year.rows, undefined, 'a long daily range gives totals only');
+  assert.match(year.note, /per month/);
+  assert.equal((await runTool('revenue_report', { from: '2025-01-01', to: '2025-12-31', group: 'month' }, MANAGER)).rows.length, 12);
+  await assert.rejects(runTool('revenue_report', { from: 'last month', to: today }, MANAGER), { status: 400 });
+});
+
 test('the options say which lookups the role has', async () => {
   const staffOptions = (await api.call('GET', '/chat/options', { token: staff })).body;
   assert.equal(staffOptions.enabled, true);
@@ -104,6 +150,7 @@ test('answers stock, product and order questions, with links to the pages', asyn
   const stock = await ask(staff, `How many ${sku} are in stock?`);
   assert.match(stock, new RegExp(`\\[${sku}\\]\\(/products\\?search=${sku}\\)`));
   assert.match(stock, new RegExp(`${tag} 12`), 'the quantity in the test warehouse');
+  assert.equal(lastAnsweredBy, 'basic');
 
   const product = await ask(staff, `Find product ${sku}`);
   assert.match(product, /\$9\.99/);
@@ -216,6 +263,7 @@ test('the AI assistant calls the lookups and streams the answer it writes from t
     { role: 'user', content: `How many ${sku} do we have?` },
   ];
   assert.equal(await ask(token, conversation), `There are 12 of [${sku}](/products?search=${sku}) in ${tag}.`);
+  assert.equal(lastAnsweredBy, 'ai');
 
   const [first, second] = provider.requests;
   assert.equal(provider.requests.length, 2);
@@ -260,6 +308,7 @@ test('when the AI provider fails before answering, the basic assistant answers',
   const token = await login(api.call, await createUser(tag, 'staff'));
 
   const answer = await ask(token, `How many ${sku} are in stock?`);
+  assert.equal(lastAnsweredBy, 'basic', 'the client is told, to show it');
   assert.equal(provider.requests.length, 1, 'the provider was tried');
   assert.match(answer, new RegExp(`\\[${sku}\\]\\(/products\\?search=${sku}\\)`));
   assert.match(answer, new RegExp(`${tag} 12`), "the basic assistant's answer");

@@ -7,12 +7,15 @@ import { reply as basicReply } from './basicAssistant.js';
 export const assistantKind = () => (aiConfig() ? 'ai' : 'basic');
 
 // messages: the conversation, oldest first, ending with the question. Yields the answer in parts.
-export async function* answer({ messages, user, signal }) {
+// answered.by is set to 'ai' or 'basic': which one actually answered this question.
+export async function* answer({ messages, user, signal, answered = {} }) {
   const question = messages.at(-1).content.trim();
   if (!aiConfig()) {
+    answered.by = 'basic';
     yield* basicReply({ question, user });
     return;
   }
+  answered.by = 'ai';
   let started = false;
   try {
     for await (const part of aiReply({ messages, user, signal })) {
@@ -22,6 +25,7 @@ export async function* answer({ messages, user, signal }) {
   } catch (err) {
     if (started || signal?.aborted) throw err;
     console.warn(`AI assistant failed, the basic assistant answers instead: ${err.message}`);
+    answered.by = 'basic';
     yield* basicReply({ question, user });
   }
 }
