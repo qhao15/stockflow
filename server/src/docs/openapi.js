@@ -197,7 +197,7 @@ function operation(path, tag, summary, { auth, body, upload, query: queryParams 
     [ok]: {
       description: ok === 204 ? 'Done, with no content' : 'Success',
       ...(file ? { content: { [FILE_TYPES[file]]: { schema: { type: 'string', format: 'binary' } } } } : {}),
-      ...(stream ? { content: { 'text/event-stream': { schema: { type: 'string', description: 'Lines of `data: {"type":"text","text":"..."}`, then `data: {"type":"done"}`' } } } } : {}),
+      ...(stream ? { content: { 'text/event-stream': { schema: { type: 'string', description: 'Lines of `data: {"type":"text","text":"..."}`, then `data: {"type":"done","assistant":"ai"}` (or `"basic"`: which assistant answered)' } } } } : {}),
       ...(okSchema ? { content: json(ref(okSchema)) } : {}),
     },
   };

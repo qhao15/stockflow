@@ -5,17 +5,26 @@ import { pool } from '../db/pool.js';
 import { hasPermission } from '../auth/permissions.js';
 import { AppError } from '../services/errors.js';
 import { listProducts } from '../services/products.js';
-import { listStock } from '../services/stock.js';
-import { listSalesOrders } from '../services/salesOrders.js';
+import { listMovements, listStock } from '../services/stock.js';
+import { getSalesOrder, listSalesOrders } from '../services/salesOrders.js';
 import { listPurchaseOrders } from '../services/purchaseOrders.js';
 import { listCustomers } from '../services/customers.js';
 import { listSuppliers } from '../services/suppliers.js';
-import { getLowStock, getSummary, getTopProducts } from '../services/reports.js';
+import { getLowStock, getRevenue, getSummary, getTopProducts } from '../services/reports.js';
 
 const MAX_ROWS = 5;
 const text = (description) => ({ type: 'string', description });
 const input = (properties = {}, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
-const can = (user, permission) => hasPermission(user.role, permission);
+// A tool's permission is one name or a list, all of which the role needs.
+const can = (user, permission) => [permission].flat().every((p) => hasPermission(user.role, p));
+// Checked by the report itself (a 400 the model is told about): providers accept few schema keywords.
+const DAY = { type: 'string' };
+const MOVEMENT_ROWS = 10;
+const DAY_ROWS = 31; // a longer daily report gives totals only
+
+// The one record a search means: an exact code match, or the only match. Otherwise null, and
+// the caller lists the matches so the model can ask which one.
+const pick = (rows, code, query) => rows.find((r) => r[code].toLowerCase() === query.trim().toLowerCase()) ?? (rows.length === 1 ? rows[0] : null);
 
 // A day N days ago, as YYYY-MM-DD in the app's time zone (pool.js sets it for Node too).
 const daysAgo = (days) => {
@@ -131,6 +140,81 @@ export const TOOLS = [
         suppliers: rows.map((s) => ({
           id: s.id, code: s.code, name: s.name, city: s.city, isActive: s.isActive, receivedCount: s.receivedCount, spend: s.spend, openCount: s.openCount,
         })),
+      };
+    },
+  },
+  {
+    name: 'stock_movements',
+    description: "A product's latest stock movements, newest first: sales, purchase receipts, transfers, adjustments and cancellations, each with the order or transfer behind it. Explains why stock changed.",
+    permission: 'stock.view',
+    input: input({ query: text('A SKU, or part of a product name') }, ['query']),
+    async run({ query }) {
+      const { rows } = await listStock({ search: query }, { limit: MAX_ROWS });
+      const product = pick(rows, 'sku', query);
+      if (!product) {
+        return rows.length
+          ? { message: 'Several products match: ask which one, or use its SKU', matches: rows.map(({ sku, name }) => ({ sku, name })) }
+          : { message: 'No product matches' };
+      }
+      const { rows: movements, total } = await listMovements({ productId: product.id }, { limit: MOVEMENT_ROWS });
+      return {
+        product: { sku: product.sku, name: product.name, total: product.total },
+        totalMovements: total,
+        movements: movements.map((m) => ({
+          date: m.createdAt,
+          warehouse: m.warehouseCode,
+          type: m.type,
+          change: m.change,
+          balanceAfter: m.balanceAfter,
+          ...(m.referenceNumber ? { reference: { type: m.referenceType, number: m.referenceNumber, id: m.referenceId } } : {}),
+          ...(m.otherWarehouseCode ? { otherWarehouse: m.otherWarehouseCode } : {}),
+          ...(m.note ? { note: m.note } : {}),
+          by: m.userName,
+        })),
+      };
+    },
+  },
+  {
+    name: 'customer_orders',
+    description: "One customer's latest sales orders, newest first, with the lines of the most recent one: what they bought last.",
+    permission: ['customers.view', 'sales_orders.view'],
+    input: input({ query: text('A customer code, or part of a name') }, ['query']),
+    async run({ query }) {
+      const { rows } = await listCustomers({ search: query, status: 'all' }, { limit: MAX_ROWS });
+      const customer = pick(rows, 'code', query);
+      if (!customer) {
+        return rows.length
+          ? { message: 'Several customers match: ask which one, or use the code', matches: rows.map(({ code, name, city }) => ({ code, name, city })) }
+          : { message: 'No customer matches' };
+      }
+      const { rows: orders, total } = await listSalesOrders({ customerId: customer.id }, { limit: MAX_ROWS });
+      const latest = orders.length ? await getSalesOrder(orders[0].id) : null;
+      return {
+        customer: { id: customer.id, code: customer.code, name: customer.name, orderCount: customer.orderCount, revenue: customer.revenue },
+        totalOrders: total,
+        orders: orders.map((o) => ({ id: o.id, orderNumber: o.orderNumber, status: o.status, orderDate: o.orderDate, totalAmount: o.totalAmount })),
+        ...(latest ? { latestOrderLines: latest.items.map(({ sku, name, quantity, unitPrice, lineTotal }) => ({ sku, name, quantity, unitPrice, lineTotal })) } : {}),
+      };
+    },
+  },
+  {
+    name: 'revenue_report',
+    description: 'Revenue, gross profit and number of orders for any date range (completed orders only), with totals, and per day or per month. Use it for questions like "revenue last month" or "profit in October".',
+    permission: 'reports.view',
+    input: input({
+      from: { ...DAY, description: 'First day, YYYY-MM-DD' },
+      to: { ...DAY, description: 'Last day, YYYY-MM-DD' },
+      group: { type: 'string', enum: ['day', 'month'], description: 'Per day (at most 400 days) or per month (at most 60 months)' },
+    }, ['from', 'to']),
+    async run({ from, to, group = 'day' }) {
+      const report = await getRevenue({ from, to, group });
+      const rows = group === 'day' && report.rows.length > DAY_ROWS ? undefined : report.rows;
+      return {
+        from: report.from,
+        to: report.to,
+        group: report.group,
+        totals: report.totals,
+        ...(rows ? { rows } : { note: `More than ${DAY_ROWS} days: totals only. Ask per month for a breakdown.` }),
       };
     },
   },

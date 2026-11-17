@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
-  Alert, Box, Button, ClickAwayListener, Fab, IconButton, Link, List, ListItem, ListItemButton, ListItemText, Paper, Stack, TextField, Tooltip,
+  Alert, Box, Button, Chip, ClickAwayListener, Fab, IconButton, Link, List, ListItem, ListItemButton, ListItemText, Paper, Stack, TextField, Tooltip,
   Typography, useMediaQuery,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -37,7 +37,8 @@ function Line({ text, onLink }) {
   return <>{parts}</>;
 }
 
-function Message({ role, content, onLink }) {
+// fallback: the AI is set up, but the basic assistant gave this answer because the AI was unavailable.
+function Message({ role, content, onLink, fallback }) {
   const mine = role === 'user';
   return (
     <Box sx={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '88%' }}>
@@ -49,11 +50,17 @@ function Message({ role, content, onLink }) {
       >
         {mine ? content : content.split('\n').map((line, i) => <Fragment key={i}>{i > 0 && '\n'}<Line text={line} onLink={onLink} /></Fragment>)}
       </Box>
+      {fallback && (
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5, px: 0.5 }}>
+          Basic answer: the AI was busy, please try again later.
+        </Typography>
+      )}
     </Box>
   );
 }
 
 // Reads the server-sent events of POST /api/chat, calling onText with each part of the answer.
+// Returns which assistant answered: 'ai' or 'basic'.
 async function streamAnswer(messages, onText) {
   const res = await fetch('/api/chat', {
     method: 'POST',
@@ -68,6 +75,7 @@ async function streamAnswer(messages, onText) {
   }
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = '';
+  let answeredBy = null;
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -78,8 +86,10 @@ async function streamAnswer(messages, onText) {
       const event = JSON.parse(raw.replace(/^data: /, ''));
       if (event.type === 'text') onText(event.text);
       if (event.type === 'error') throw new Error(event.message);
+      if (event.type === 'done') answeredBy = event.assistant ?? null;
     }
   }
+  return answeredBy;
 }
 
 // Chats are kept in this browser, separately for each user. Storage can be unavailable
@@ -173,6 +183,7 @@ export default function ChatPanel() {
   const theme = useTheme();
   const narrow = useMediaQuery(theme.breakpoints.down('sm'));
   const [enabled, setEnabled] = useState(false);
+  const [kind, setKind] = useState(null); // which assistant is set up: 'ai' or 'basic'
   const [open, setOpen] = useState(false);
   const [showList, setShowList] = useState(false);
   const [chats, setChats] = useState(() => loadChats(user));
@@ -189,7 +200,12 @@ export default function ChatPanel() {
   const messages = active?.messages ?? [];
 
   useEffect(() => {
-    api.get('/chat/options').then((res) => setEnabled(res.data.enabled)).catch(() => setEnabled(false));
+    api.get('/chat/options')
+      .then((res) => {
+        setEnabled(res.data.enabled);
+        setKind(res.data.assistant);
+      })
+      .catch(() => setEnabled(false));
   }, []);
 
   useEffect(() => saveChats(user, chats), [user, chats]);
@@ -265,10 +281,13 @@ export default function ChatPanel() {
     setError('');
     setBusy(true);
     try {
-      await streamAnswer(conversation.slice(-MAX_MESSAGES), (part) => updateChat(id, (chat) => ({
-        ...chat,
-        messages: [...chat.messages.slice(0, -1), { role: 'assistant', content: chat.messages.at(-1).content + part }],
-      })));
+      // Only role and content go to the server; answeredBy stays in this browser.
+      const answeredBy = await streamAnswer(conversation.slice(-MAX_MESSAGES).map(({ role, content }) => ({ role, content })),
+        (part) => updateChat(id, (chat) => ({
+          ...chat,
+          messages: [...chat.messages.slice(0, -1), { role: 'assistant', content: chat.messages.at(-1).content + part }],
+        })));
+      updateChat(id, (chat) => ({ ...chat, messages: [...chat.messages.slice(0, -1), { ...chat.messages.at(-1), answeredBy }] }));
     } catch (err) {
       if (err.status === 401) {
         logout(true);
@@ -325,7 +344,15 @@ export default function ChatPanel() {
                   <IconButton aria-label={showList ? 'Hide chats' : 'Show chats'} onClick={() => setShowList((v) => !v)}><ChatsIcon /></IconButton>
                 </Tooltip>
                 <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                  <Typography fontWeight={700} noWrap>{active?.title ?? 'Assistant'}</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                    <Typography fontWeight={700} noWrap>{active?.title ?? 'Assistant'}</Typography>
+                    {kind && (
+                      <Tooltip title={kind === 'ai' ? 'Answered by an AI model' : 'A basic assistant without AI: it understands a few kinds of question'}>
+                        <Chip label={kind === 'ai' ? 'AI' : 'Basic'} size="small" color={kind === 'ai' ? 'primary' : 'default'} variant="outlined"
+                          sx={{ height: 20, fontSize: 11, fontWeight: 700, flexShrink: 0 }} />
+                      </Tooltip>
+                    )}
+                  </Box>
                   <Typography variant="caption" color="text.secondary" noWrap component="div">Uses what your role can see. Changes nothing.</Typography>
                 </Box>
                 <Tooltip title="New chat">
@@ -336,13 +363,15 @@ export default function ChatPanel() {
               <Stack spacing={1.5} sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', p: 2 }}>
                 {messages.length === 0 && (
                   <Typography color="text.secondary" fontSize={14}>
-                    Ask about stock, products, orders or this month&apos;s figures. Try &quot;Which products are low on stock?&quot;
+                    {kind === 'ai'
+                      ? <>Ask about stock, products, orders, customers or sales figures. Try &quot;What was revenue last month?&quot;</>
+                      : <>Ask about stock, products, orders or this month&apos;s figures. Try &quot;Which products are low on stock?&quot;</>}
                   </Typography>
                 )}
                 {messages.map((m, i) => (
                   // By position: messages are only ever added at the end.
                   <Message key={i} role={m.role} content={m.content || (busy && i === messages.length - 1 ? '…' : '')}
-                    onLink={narrow ? () => setOpen(false) : undefined} />
+                    onLink={narrow ? () => setOpen(false) : undefined} fallback={kind === 'ai' && m.answeredBy === 'basic'} />
                 ))}
                 {error && <Alert severity="error">{error}</Alert>}
                 <div ref={endRef} />
